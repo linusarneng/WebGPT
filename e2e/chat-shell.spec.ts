@@ -110,6 +110,21 @@ test.describe('WebGPT shell', () => {
     await expect(page.locator('.notice--warn')).toContainText('WebGPU is unavailable');
   });
 
+  test('renders an honest visual Technical panel without horizontal overflow', async ({ page, isMobile }) => {
+    await open(page);
+    if (isMobile) await page.getByRole('button', { name: 'Open conversation history' }).click();
+
+    await page.locator('.technical-panel__summary').click();
+    const panel = page.locator('.technical-panel');
+    await expect(panel).toHaveAttribute('open', '');
+    await expect(panel.locator('.technical-panel__status')).toHaveAttribute('data-state', 'idle');
+    await expect(panel.locator('.technical-panel__chart')).toHaveCount(2);
+    await expect(panel).toContainText('Waiting for real generation samples');
+
+    const overflow = await panel.evaluate((node) => node.scrollWidth - node.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
   test('conversations persist across a page reload', async ({ page }) => {
     await open(page);
     await loadModel(page);

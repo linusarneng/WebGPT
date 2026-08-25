@@ -97,3 +97,30 @@ export function formatDuration(ms: number): string {
 export function formatRate(rate: number | undefined): string {
   return rate === undefined ? 'No generation yet' : `${rate.toFixed(1)} tok/s`;
 }
+
+export interface SparklineModel {
+  state: 'data' | 'empty' | 'unavailable';
+  path: string;
+  valueCount: number;
+}
+
+/** Converts only observed values into a compact SVG path for the technical panel. */
+export function createSparklineModel(values: readonly number[] | undefined): SparklineModel {
+  if (values === undefined) return { state: 'unavailable', path: '', valueCount: 0 };
+  const samples = values.filter((value) => Number.isFinite(value));
+  if (samples.length === 0) return { state: 'empty', path: '', valueCount: 0 };
+
+  const minimum = Math.min(...samples);
+  const maximum = Math.max(...samples);
+  const span = maximum - minimum;
+  const point = (value: number, index: number): string => {
+    const x = samples.length === 1 ? 0 : (index / (samples.length - 1)) * 100;
+    const y = span === 0 ? 12 : 24 - ((value - minimum) / span) * 24;
+    return `${x} ${y}`;
+  };
+  const first = samples.length === 1 ? '50 12' : point(samples[0]!, 0);
+  const path = samples.length === 1
+    ? `M ${first} L ${first}`
+    : samples.map((value, index) => `${index === 0 ? 'M' : 'L'} ${point(value, index)}`).join(' ');
+  return { state: 'data', path, valueCount: samples.length };
+}

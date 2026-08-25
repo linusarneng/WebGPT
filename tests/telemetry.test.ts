@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createBrowserMetricsCollector,
   createGenerationTelemetry,
+  createSparklineModel,
   formatBrowserMetric,
 } from '../src/telemetry/runtime-telemetry';
 
@@ -80,5 +81,24 @@ describe('browser metrics', () => {
       deviceMemory: 8,
       cpuCores: 12,
     });
+  });
+});
+
+describe('sparkline telemetry models', () => {
+  it('renders a neutral empty model instead of inventing a line without samples', () => {
+    expect(createSparklineModel([])).toEqual({ state: 'empty', path: '', valueCount: 0 });
+  });
+
+  it('creates a finite, visible path for one or more real samples', () => {
+    expect(createSparklineModel([12])).toEqual({ state: 'data', path: 'M 50 12 L 50 12', valueCount: 1 });
+    expect(createSparklineModel([10, 20, 15])).toEqual({
+      state: 'data',
+      path: 'M 0 24 L 50 0 L 100 12',
+      valueCount: 3,
+    });
+  });
+
+  it('keeps unavailable browser metrics visibly unsupported rather than charting guessed data', () => {
+    expect(createSparklineModel(undefined)).toEqual({ state: 'unavailable', path: '', valueCount: 0 });
   });
 });

@@ -1195,6 +1195,25 @@ textarea {
 .technical-panel__details { color: var(--ink-faint); font-size: 11px; }
 .technical-panel__details summary { cursor: pointer; }
 .technical-panel__error { margin: 5px 0 0; color: var(--danger); overflow-wrap: anywhere; }
+.technical-panel__status { display: inline-flex; align-items: center; justify-self: start; gap: 6px; min-height: 22px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-sunken); color: var(--ink-muted); font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.technical-panel__status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); }
+.technical-panel__status[data-state='ready'], .technical-panel__status[data-state='generating'] { border-color: var(--accent-line); background: var(--accent-wash); color: var(--accent); }
+.technical-panel__status[data-state='ready'] .technical-panel__status-dot, .technical-panel__status[data-state='generating'] .technical-panel__status-dot { background: var(--accent); }
+.technical-panel__status[data-state='loading'] .technical-panel__status-dot, .technical-panel__status[data-state='generating'] .technical-panel__status-dot { animation: pulse 1.4s ease-in-out infinite; }
+.technical-panel__status[data-state='error'] { border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); background: var(--danger-wash); color: var(--danger); }
+.technical-panel__status[data-state='error'] .technical-panel__status-dot { background: var(--danger); }
+.technical-panel__metric--rate { grid-column: 1 / -1; }
+.technical-panel__chart { display: grid; gap: 2px; min-width: 0; margin-top: 5px; }
+.technical-panel__sparkline { display: block; width: 100%; height: 25px; overflow: visible; border-radius: 3px; background: linear-gradient(180deg, rgba(124, 219, 178, .075), transparent); }
+.technical-panel__sparkline-path { fill: none; stroke: var(--accent); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+.technical-panel__chart[data-state='empty'] .technical-panel__sparkline { background: repeating-linear-gradient(90deg, transparent 0 7px, rgba(120, 132, 147, .22) 7px 8px); }
+.technical-panel__chart[data-state='unavailable'] .technical-panel__sparkline { background: repeating-linear-gradient(-45deg, transparent 0 4px, rgba(120, 132, 147, .13) 4px 5px); }
+.technical-panel__chart-caption { overflow: hidden; color: var(--ink-faint); font-family: var(--font-mono); font-size: 8px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.technical-panel__memory { display: grid; gap: 4px; padding: 7px 8px; border: 1px solid var(--line-soft); border-radius: 7px; background: color-mix(in srgb, var(--canvas) 48%, transparent); }
+.technical-panel__memory-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.technical-panel__memory-label, .technical-panel__memory-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.technical-panel__memory-label { color: var(--ink-faint); font-size: 8.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.technical-panel__memory-value { min-width: 0; overflow: hidden; color: var(--ink-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ------------------------------------------------ premium dark repair -- */
 html,
