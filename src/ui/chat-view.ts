@@ -1,20 +1,29 @@
-import { MODEL_CONFIG } from '../config/model';
+import type { ModelConfig, ModelId } from '../config/model';
 import type { Conversation, Message } from '../domain/chat';
 import type { LoadPhase, RuntimeStatus } from '../inference/protocol';
 import { clear, el } from './dom';
 import { icon } from './icons';
 import { renderRichText } from './markdown';
-import { LOAD_PHASES, MODEL_NAME } from './model-status';
+import { createModelPicker, type ModelPickerView } from './model-picker';
+import { LOAD_PHASES } from './model-status';
 
 export interface ChatViewCallbacks {
   onStarterPrompt(prompt: string): void;
   onLoadModel(): void;
+  onSelectModel(id: ModelId): void;
   onRetry(messageId: string): void;
   onCopy(text: string): void;
 }
 
 export interface ChatViewState {
   conversation: Conversation | undefined;
+  /** The model the card is about: the pending choice, or the running one. */
+  model: ModelConfig;
+  selectedId: ModelId;
+  loadedId?: ModelId;
+  /** True while the choice cannot change, e.g. mid-reply. */
+  locked: boolean;
+  lockReason?: string;
   runtimeStatus: RuntimeStatus;
   runtimeError?: string;
   runtimeWarning?: string;
@@ -63,6 +72,10 @@ function specRow(term: string, value: string): HTMLElement {
 }
 
 export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
+  const picker: ModelPickerView = createModelPicker(
+    { onSelect: (id) => callbacks.onSelectModel(id) },
+    { name: 'model-card-choice' },
+  );
   const list = el('ul', { class: 'message-list' });
   const inner = el('div', { class: 'conversation__inner' }, [list]);
   const element = el('div', { class: 'conversation', tabindex: '0' }, [inner]);
@@ -118,20 +131,26 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
   function renderPlate(state: ChatViewState): HTMLElement {
     const loading = state.runtimeStatus === 'loading';
     const phase: LoadPhase = state.runtimePhase ?? (state.runtimePercent !== undefined ? 'downloading' : 'checking');
+    const model = state.model;
 
     const plate = el('section', { class: 'plate', 'data-state': loading ? 'loading' : 'idle' }, [
       el('p', { class: 'plate__eyebrow' }, ['WebGPT · local runtime']),
-      el('h1', { class: 'plate__title' }, [`Run ${MODEL_NAME} in this browser.`]),
+      el('h1', { class: 'plate__title' }, [`Run ${model.name} in this browser.`]),
       el('div', { class: 'plate__specs' }, [
-        specRow('Model', MODEL_CONFIG.modelId),
+        specRow('Repository', model.modelId),
         specRow('Runs on', 'Your device — WebGPU, or CPU if WebGPU is unavailable'),
         specRow('Needs', 'No account, no API key, no server'),
-      ]),
-      el('p', { class: 'plate__note' }, [
-        `Model files download once — about ${MODEL_CONFIG.approximateDownloadMb} MB — and stay cached in this browser. ` +
-          'The first load takes a moment; after that it starts from the cache.',
+        specRow('First load', `About ${model.approximateDownloadMb} MB, then cached in this browser`),
       ]),
     ]);
+
+    picker.render({
+      selectedId: state.selectedId,
+      loadedId: state.loadedId,
+      locked: state.locked || loading,
+      lockReason: state.lockReason,
+    });
+    plate.append(picker.element);
 
     if (loading) {
       plate.append(renderPhaseRail(phase));
@@ -139,7 +158,7 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
         plate.append(renderMeter(state.runtimePercent));
       }
     } else {
-      const load = el('button', { class: 'plate__cta', type: 'button' }, ['Load model']);
+      const load = el('button', { class: 'plate__cta', type: 'button' }, [`Load ${model.name}`]);
       load.addEventListener('click', callbacks.onLoadModel);
       plate.append(load);
     }
@@ -169,7 +188,7 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
       empty.append(
         el('h1', { class: 'empty__title' }, ['What would you like to work on?']),
         el('p', { class: 'empty__subtitle' }, [
-          `${MODEL_NAME} is loaded and answering on this device. It is a small model — fast and private, and less capable than a large hosted assistant.`,
+          `${state.model.name} is loaded and answering on this device. It is a small model — fast and private, and less capable than a large hosted assistant.`,
         ]),
       );
     }

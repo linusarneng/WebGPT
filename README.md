@@ -56,34 +56,27 @@ ui/*  ──▶ state/chat-store  ──▶  inference/inference-client ──�
 - `src/ui/markdown.ts` renders assistant output by building DOM nodes and assigning `textContent`.
   **No model or user text is ever passed through `innerHTML`.**
 
-## Model, performance, and browser support
+## Models, cache, performance, and browser support
 
-| | |
-|---|---|
-| **Default model** | `onnx-community/Qwen2.5-0.5B-Instruct` |
-| **WebGPU dtype** | `q4f16` |
-| **WASM (CPU) dtype** | `q4` |
-| **First-load download** | roughly 500 MB of model weights, fetched from the Hugging Face CDN |
-| **Cached afterwards** | yes — the browser HTTP cache keeps the weights for later visits |
-| **Context policy** | system prompt + the last 12 conversation messages (`MODEL_CONFIG.maxHistoryMessages`) |
-| **Max reply length** | 512 new tokens |
+WebGPT intentionally exposes **exactly three** local, browser-compatible ONNX models. Qwen2.5 remains the default; pick a different model from the first-run card or the top-bar model control. Choosing a model only changes the pending selection. It persists in `localStorage`, releases any currently resident worker pipeline, retains conversations, and requires an explicit **Load** before downloading or running the new model.
 
-**WebGPU is strongly preferred.** WebGPT calls `navigator.gpu.requestAdapter()` inside the worker and
-uses WebGPU when an adapter is returned. Today that means recent Chrome or Edge on desktop, and Safari
-on recent macOS/iOS versions. When no adapter is available, WebGPT falls back to CPU execution via
-WASM and says so plainly — in the status pill (`CPU / WASM`) and in a banner above the conversation.
-CPU generation works but is **noticeably slower**, often several seconds per reply on a small model.
+| Model | Hugging Face repository | First download | Best for |
+|---|---|---:|---|
+| **Qwen2.5 0.5B Instruct (default)** | `onnx-community/Qwen2.5-0.5B-Instruct` | ~500 MB | The recommended balance for general chat and short writing |
+| Granite 4.0 350M | `onnx-community/granite-4.0-350m-ONNX-web` | ~360 MB | The smallest local download |
+| Qwen3 0.6B | `onnx-community/Qwen3-0.6B-ONNX` | ~590 MB | More headroom for longer, harder prompts |
 
-Practical requirements: a modern desktop browser, a few GB of free RAM, and enough disk space for the
-cached weights. Older phones and low-memory machines may fail to allocate the model; if that happens,
-the load error is shown with a retry button rather than a blank screen.
+Weights are fetched directly from the Hugging Face CDN only when you explicitly load a model. The browser HTTP cache stores each model independently; clearing site data/cache can require another download. Prompts and replies are never sent with those weight requests.
 
-### Changing the model
+**WebGPU is strongly preferred.** WebGPT calls `navigator.gpu.requestAdapter()` inside the worker and uses WebGPU when an adapter is returned. Recent Chrome/Edge desktop and Safari on current macOS/iOS are the most practical targets. Without WebGPU, it falls back to CPU/WASM and says so plainly; CPU generation is noticeably slower.
 
-Every model decision lives in `src/config/model.ts` — model id, both dtypes, the system prompt,
-`max_new_tokens`, temperature, `top_p`, and how much history is replayed. Point `modelId` at any
-`onnx-community` text-generation repo with a chat template and matching ONNX artifacts, adjust the
-dtypes to weights that repo actually publishes, and the rest of the app needs no changes.
+> **Tailscale note:** a page served over plain HTTP through a Tailscale address cannot use WebGPU because browsers require a secure context for WebGPU. Use HTTPS (or open the app on `localhost`) when testing WebGPU remotely. WebGPT has no backend and does not require Tailscale.
+
+Practical requirements: a modern browser, a few GB of free RAM, and enough disk space for cached weights. Older phones and low-memory machines may fail to allocate a model; the load error is recoverable and keeps the conversation intact.
+
+### Model configuration
+
+The catalog and generation settings live in `src/config/model.ts`; preference persistence lives in `src/storage/model-preference.ts`. Keep model ids, dtypes, and approximate download sizes accurate to the ONNX artifacts each repository publishes.
 
 ## Privacy
 

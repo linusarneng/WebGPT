@@ -7,7 +7,7 @@ import {
   type Chat,
   type TextGenerationPipeline,
 } from '@huggingface/transformers';
-import { MODEL_CONFIG } from '../config/model';
+import { GENERATION, getModel, type ModelConfig, type ModelId } from '../config/model';
 import type { Backend, WorkerCommand, WorkerEvent } from './protocol';
 
 // Model weights come from the Hugging Face CDN; nothing is served by an app backend.
@@ -48,15 +48,39 @@ const createTextGenerationPipeline = pipeline as unknown as (
 let generator: TextGenerationPipeline | undefined;
 let loading: Promise<void> | undefined;
 let backend: Backend | undefined;
+/** The model the resident pipeline was built from. */
+let active: ModelConfig | undefined;
 const stoppers = new Map<string, InterruptableStoppingCriteria>();
 
-async function initialize(): Promise<void> {
-  if (generator) {
-    emit({ type: 'ready', backend: backend!, modelId: MODEL_CONFIG.modelId, ...(backend === 'wasm' ? { warning: WASM_WARNING } : {}) });
+/** Releases the resident pipeline before another one is built beside it. */
+async function release(): Promise<void> {
+  const previous = generator;
+  generator = undefined;
+  active = undefined;
+  backend = undefined;
+  stoppers.clear();
+  try {
+    await previous?.dispose();
+  } catch {
+    /* A pipeline that cannot be disposed is still dropped from this worker. */
+  }
+}
+
+async function initialize(id: ModelId): Promise<void> {
+  const model = getModel(id);
+  if (generator && active?.id === model.id) {
+    emit({
+      type: 'ready',
+      backend: backend!,
+      model: model.id,
+      ...(backend === 'wasm' ? { warning: WASM_WARNING } : {}),
+    });
     return;
   }
+  // A different model means the previous pipeline goes first: one at a time.
+  if (generator) await release();
   // Coalesce concurrent initialize commands onto one download.
-  loading ??= loadPipeline().finally(() => {
+  loading ??= loadPipeline(model).finally(() => {
     loading = undefined;
   });
   return loading;
@@ -65,10 +89,10 @@ async function initialize(): Promise<void> {
 const WASM_WARNING =
   'WebGPU is unavailable, so WebGPT is running on the CPU (WASM). Replies will be noticeably slower.';
 
-async function loadPipeline(): Promise<void> {
+async function loadPipeline(model: ModelConfig): Promise<void> {
   emit({ type: 'status', status: 'loading', phase: 'checking', detail: 'Checking device' });
   const detected = await detectBackend();
-  const dtype = detected === 'webgpu' ? MODEL_CONFIG.webgpuDtype : MODEL_CONFIG.wasmDtype;
+  const dtype = detected === 'webgpu' ? model.webgpuDtype : model.wasmDtype;
 
   emit({ type: 'status', status: 'loading', phase: 'downloading', detail: 'Downloading model' });
   try {
@@ -90,7 +114,7 @@ async function loadPipeline(): Promise<void> {
         }
       },
     } as const;
-    generator = await createTextGenerationPipeline('text-generation', MODEL_CONFIG.modelId, options);
+    generator = await createTextGenerationPipeline('text-generation', model.modelId, options);
   } catch (error) {
     generator = undefined;
     emit({ type: 'error', code: 'load-failed', message: describe(error) });
@@ -98,11 +122,12 @@ async function loadPipeline(): Promise<void> {
   }
 
   backend = detected;
+  active = model;
   emit({ type: 'status', status: 'loading', phase: 'preparing', detail: 'Preparing model' });
   emit({
     type: 'ready',
     backend: detected,
-    modelId: MODEL_CONFIG.modelId,
+    model: model.id,
     ...(detected === 'wasm' ? { warning: WASM_WARNING } : {}),
   });
 }
@@ -125,14 +150,18 @@ async function generate(requestId: string, messages: Chat): Promise<void> {
       text += chunk;
       emit({ type: 'token', requestId, text: chunk });
     },
+    token_callback_function: (tokens: bigint[]) => {
+      // This callback is tokenizer-level ground truth; text chunks are not tokens.
+      if (tokens.length) emit({ type: 'token-count', requestId, count: tokens.length });
+    },
   });
 
   try {
     await generator(messages, {
-      max_new_tokens: MODEL_CONFIG.maxNewTokens,
-      temperature: MODEL_CONFIG.temperature,
-      top_p: MODEL_CONFIG.topP,
-      do_sample: MODEL_CONFIG.temperature > 0,
+      max_new_tokens: GENERATION.maxNewTokens,
+      temperature: GENERATION.temperature,
+      top_p: GENERATION.topP,
+      do_sample: GENERATION.temperature > 0,
       return_full_text: false,
       streamer,
       // `stopping_criteria` is forwarded to `model.generate` but absent from the
@@ -154,7 +183,7 @@ scope.addEventListener('message', (event: MessageEvent<WorkerCommand>) => {
   const command = event.data;
   switch (command.type) {
     case 'initialize':
-      void initialize();
+      void initialize(command.model);
       break;
     case 'generate':
       void generate(command.requestId, command.messages as Chat);
@@ -163,8 +192,7 @@ scope.addEventListener('message', (event: MessageEvent<WorkerCommand>) => {
       stoppers.get(command.requestId)?.interrupt();
       break;
     case 'dispose':
-      generator = undefined;
-      stoppers.clear();
+      void release();
       break;
   }
 });

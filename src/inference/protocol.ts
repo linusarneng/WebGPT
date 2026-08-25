@@ -1,4 +1,4 @@
-import type { ChatMessage } from '../config/model';
+import type { ChatMessage, ModelId } from '../config/model';
 
 export type Backend = 'webgpu' | 'wasm';
 
@@ -11,7 +11,7 @@ export type ErrorCode = 'load-failed' | 'generation-failed' | 'unsupported' | 'w
 
 /** Main thread → worker. */
 export type WorkerCommand =
-  | { type: 'initialize' }
+  | { type: 'initialize'; model: ModelId }
   | { type: 'generate'; requestId: string; messages: ChatMessage[] }
   | { type: 'abort'; requestId: string }
   | { type: 'dispose' };
@@ -20,8 +20,10 @@ export type WorkerCommand =
 export type WorkerEvent =
   | { type: 'status'; status: RuntimeStatus; detail?: string; phase?: LoadPhase }
   | { type: 'progress'; file: string; loaded?: number; total?: number; progress?: number }
-  | { type: 'ready'; backend: Backend; modelId: string; warning?: string }
+  | { type: 'ready'; backend: Backend; model: ModelId; warning?: string }
   | { type: 'token'; requestId: string; text: string }
+  /** Exact generated token ids from Transformers.js' tokenizer callback. */
+  | { type: 'token-count'; requestId: string; count: number }
   | { type: 'complete'; requestId: string; text: string }
   | { type: 'aborted'; requestId: string; text: string }
   | { type: 'error'; requestId?: string; code: ErrorCode; message: string };

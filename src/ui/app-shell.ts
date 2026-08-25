@@ -2,14 +2,13 @@ import { el } from './dom';
 import { icon } from './icons';
 import type { ChatViewView } from './chat-view';
 import type { ComposerView } from './composer';
-import type { ModelStatusView } from './model-status';
 import type { SidebarView } from './sidebar';
 
 export interface AppShellParts {
   sidebar: SidebarView;
   chatView: ChatViewView;
   composer: ComposerView;
-  status: ModelStatusView;
+  status: { readonly element: HTMLElement };
 }
 
 export interface AppShellView {

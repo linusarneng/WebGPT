@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MODEL_CONFIG } from '../src/config/model';
+import { getModel } from '../src/config/model';
 import { createChatView, type ChatViewState, type ChatViewView } from '../src/ui/chat-view';
 
 const callbacks = {
   onStarterPrompt: vi.fn(),
   onLoadModel: vi.fn(),
+  onSelectModel: vi.fn(),
   onRetry: vi.fn(),
   onCopy: vi.fn(),
 };
@@ -14,11 +15,19 @@ const text = (): string => view.element.textContent ?? '';
 const q = (selector: string): HTMLElement | null => view.element.querySelector(selector);
 const all = (selector: string): HTMLElement[] => [...view.element.querySelectorAll<HTMLElement>(selector)];
 const render = (state: Partial<ChatViewState> = {}): void =>
-  view.render({ conversation: undefined, runtimeStatus: 'idle', ...state });
+  view.render({
+    conversation: undefined,
+    runtimeStatus: 'idle',
+    model: getModel('qwen2.5-0.5b-instruct'),
+    selectedId: 'qwen2.5-0.5b-instruct',
+    locked: false,
+    ...state,
+  });
 
 beforeEach(() => {
   vi.clearAllMocks();
   view = createChatView(callbacks);
+  document.body.replaceChildren(view.element);
 });
 
 describe('first-run install plate', () => {
@@ -27,7 +36,7 @@ describe('first-run install plate', () => {
     const plate = q('.plate')!;
     const plateText = plate.textContent ?? '';
     expect(plateText).toContain('WebGPT');
-    expect(plateText).toContain('Qwen2.5-0.5B-Instruct');
+    expect(plateText).toContain('Qwen2.5 0.5B Instruct');
     expect(plateText.toLowerCase()).toContain('in this browser');
   });
 
@@ -39,7 +48,7 @@ describe('first-run install plate', () => {
   it('uses only the approximate size from config, never an invented exact size', () => {
     render();
     const plateText = q('.plate')!.textContent ?? '';
-    expect(plateText).toContain(String(MODEL_CONFIG.approximateDownloadMb));
+    expect(plateText).toContain(String(getModel('qwen2.5-0.5b-instruct').approximateDownloadMb));
     expect(plateText.toLowerCase()).toContain('about');
     expect(plateText.toLowerCase()).toContain('cach');
   });
@@ -47,7 +56,7 @@ describe('first-run install plate', () => {
   it('offers a prominent Load model action while idle', () => {
     render();
     const load = q('.plate__cta') as HTMLButtonElement;
-    expect(load.textContent).toBe('Load model');
+    expect(load.textContent).toContain('Load');
     load.click();
     expect(callbacks.onLoadModel).toHaveBeenCalledOnce();
   });
@@ -121,5 +130,42 @@ describe('failure and fallback', () => {
   it('does not show the fallback warning while the model is still loading', () => {
     render({ runtimeStatus: 'loading', runtimePhase: 'preparing', runtimeWarning: 'WebGPU is unavailable' });
     expect(q('.notice--warn')).toBeNull();
+  });
+});
+
+describe('choosing a model from the first-run card', () => {
+  it('puts the picker in the card, on the selected model', () => {
+    render();
+    const checked = q('.plate .model-option__input:checked') as HTMLInputElement;
+    expect(checked.value).toBe('qwen2.5-0.5b-instruct');
+    expect(all('.plate .model-option')).toHaveLength(3);
+  });
+
+  it('reports a different choice without loading anything', () => {
+    render();
+    (q('.plate input[value="qwen3-0.6b"]') as HTMLInputElement).click();
+    expect(callbacks.onSelectModel).toHaveBeenCalledWith('qwen3-0.6b');
+    expect(callbacks.onLoadModel).not.toHaveBeenCalled();
+  });
+
+  it('names the selected model in the heading, the size and the load action', () => {
+    render({ model: getModel('granite-4.0-350m'), selectedId: 'granite-4.0-350m' });
+    const plate = q('.plate')!.textContent ?? '';
+    expect(plate).toContain('Granite 4.0 350M');
+    expect(plate).toContain('360');
+    expect(q('.plate__cta')!.textContent).toContain('Load Granite 4.0 350M');
+  });
+
+  it('keeps the picker visible while loading, but locked', () => {
+    render({ runtimeStatus: 'loading', runtimePhase: 'downloading', locked: true, lockReason: 'Loading.' });
+    expect(all('.plate .model-option')).toHaveLength(3);
+    expect(all('.plate .model-option__input').every((i) => (i as HTMLInputElement).disabled)).toBe(true);
+  });
+
+  it('explains that weights are cached locally, not uploaded', () => {
+    render();
+    const plate = (q('.plate')!.textContent ?? '').toLowerCase();
+    expect(plate).toContain('cached in this browser');
+    expect(plate).toContain('never leave this device');
   });
 });

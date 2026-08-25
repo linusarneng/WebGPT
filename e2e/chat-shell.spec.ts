@@ -2,13 +2,16 @@ import { expect, test, type Page } from '@playwright/test';
 import { installMockWorker } from './mock-worker';
 
 async function open(page: Page, options: Parameters<typeof installMockWorker>[0] = {}): Promise<void> {
+  // The chosen model is intentionally persisted for people. E2E starts from a
+  // known preference so visual and behavior assertions never inherit a choice.
+  await page.addInitScript(() => localStorage.setItem('webgpt.model', 'qwen2.5-0.5b-instruct'));
   await page.addInitScript(installMockWorker(options));
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /Run Qwen2.5-0.5B-Instruct in this browser/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Run .+ in this browser/i })).toBeVisible();
 }
 
 async function loadModel(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Load model' }).click();
+  await page.getByRole('button', { name: /^Load .+$/ }).click();
   await expect(page.locator('.status')).toHaveAttribute('data-state', 'ready');
 }
 
@@ -16,7 +19,7 @@ test.describe('WebGPT shell', () => {
   test('shows the empty state, starter prompts and a load action', async ({ page }) => {
     await open(page);
     await expect(page.locator('.starter')).toHaveCount(4);
-    await expect(page.getByRole('button', { name: 'Load model' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Load .+$/ })).toBeVisible();
     await expect(page.locator('.status')).toHaveAttribute('data-state', 'idle');
     await expect(page.getByLabel('Message WebGPT')).toBeDisabled();
   });
@@ -26,13 +29,13 @@ test.describe('WebGPT shell', () => {
     const plate = page.locator('.plate');
     await expect(plate).toContainText('onnx-community/Qwen2.5-0.5B-Instruct');
     await expect(plate).toContainText('No account, no API key, no server');
-    await expect(plate).toContainText('about 500 MB');
+    await expect(plate).toContainText('About 500 MB');
     await expect(page.locator('.phase')).toHaveCount(0);
   });
 
   test('walks named load phases and then retires the plate', async ({ page }) => {
     await open(page);
-    await page.getByRole('button', { name: 'Load model' }).click();
+    await page.getByRole('button', { name: /^Load .+$/ }).click();
     await expect(page.locator('.phase')).toHaveCount(4);
     await expect(page.locator('.phase[data-state="active"]')).toHaveCount(1);
     await expect(page.locator('.plate')).toHaveCount(0);
@@ -41,7 +44,7 @@ test.describe('WebGPT shell', () => {
 
   test('reports load progress and then a ready WebGPU runtime', async ({ page }) => {
     await open(page);
-    await page.getByRole('button', { name: 'Load model' }).click();
+    await page.getByRole('button', { name: /^Load .+$/ }).click();
     await expect(page.locator('.status')).toHaveAttribute('data-state', 'loading');
     await expect(page.locator('.status')).toHaveAttribute('data-state', 'ready');
     await expect(page.locator('.status__label')).toContainText('WebGPU');
@@ -88,7 +91,7 @@ test.describe('WebGPT shell', () => {
 
   test('a failed model load is recoverable', async ({ page }) => {
     await open(page, { failLoad: true });
-    await page.getByRole('button', { name: 'Load model' }).click();
+    await page.getByRole('button', { name: /^Load .+$/ }).click();
     await expect(page.locator('.status')).toHaveAttribute('data-state', 'error');
     await expect(page.locator('.notice--error')).toContainText('Check your connection');
     await expect(page.getByRole('button', { name: 'Try loading again' })).toBeVisible();

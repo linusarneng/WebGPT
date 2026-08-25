@@ -2,6 +2,7 @@ import type { Conversation } from '../domain/chat';
 import { formatRelativeTime } from '../utils/time';
 import { clear, el } from './dom';
 import { icon } from './icons';
+import { createTechnicalPanel, type TechnicalPanelView, type TechnicalState } from './technical-panel';
 
 export interface SidebarCallbacks {
   onNewChat(): void;
@@ -13,6 +14,8 @@ export interface SidebarCallbacks {
 export interface SidebarView {
   readonly element: HTMLElement;
   render(conversations: readonly Conversation[], activeId: string | undefined): void;
+  renderTechnical(state: TechnicalState): void;
+  destroy(): void;
 }
 
 const NEW_ICON = 'M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z';
@@ -33,6 +36,7 @@ export function createSidebar(callbacks: SidebarCallbacks): SidebarView {
   let activeId: string | undefined;
 
   const list = el('ul', { class: 'chat-list' });
+  const technical: TechnicalPanelView = createTechnicalPanel();
 
   const newChatButton = el('button', { class: 'new-chat', type: 'button' }, [
     icon('plus', NEW_ICON),
@@ -54,6 +58,7 @@ export function createSidebar(callbacks: SidebarCallbacks): SidebarView {
     el('div', { class: 'sidebar__body' }, [
       el('h2', { class: 'sidebar__label' }, ['Chats']),
       list,
+      technical.element,
     ]),
     el('div', { class: 'sidebar__foot' }, ['Conversations stay in this browser.']),
   ]);
@@ -145,7 +150,16 @@ export function createSidebar(callbacks: SidebarCallbacks): SidebarView {
     for (const conversation of next) list.append(renderItem(conversation));
   }
 
-  return { element, render };
+  return {
+    element,
+    render,
+    renderTechnical(state) {
+      technical.render(state);
+    },
+    destroy() {
+      technical.destroy();
+    },
+  };
 }
 
 /**

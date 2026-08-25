@@ -2,11 +2,17 @@ import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { createApp, type App } from '../src/app';
 import { MemoryChatRepository } from '../src/storage/chat-repository';
 import type { WorkerCommand, WorkerEvent } from '../src/inference/protocol';
+import { MODEL_PREFERENCE_KEY } from '../src/storage/model-preference';
+import { getDefaultModel, MODEL_CATALOG } from '../src/config/model';
+
+const DEFAULT_MODEL = getDefaultModel();
+const OTHER_MODEL = MODEL_CATALOG.find((model) => model.id !== DEFAULT_MODEL.id)!;
 
 /** A scriptable stand-in for the Transformers.js worker. */
 class ScriptedWorker extends EventTarget {
   static latest: ScriptedWorker | undefined;
   readonly commands: WorkerCommand[] = [];
+  terminated = false;
 
   constructor() {
     super();
@@ -15,7 +21,9 @@ class ScriptedWorker extends EventTarget {
   postMessage(command: WorkerCommand): void {
     this.commands.push(command);
   }
-  terminate(): void {}
+  terminate(): void {
+    this.terminated = true;
+  }
   emit(event: WorkerEvent): void {
     this.dispatchEvent(Object.assign(new Event('message'), { data: event }));
   }
@@ -24,8 +32,13 @@ class ScriptedWorker extends EventTarget {
     if (!generate || generate.type !== 'generate') throw new Error('no generate command sent');
     return generate.requestId;
   }
-  becomeReady(): void {
-    this.emit({ type: 'ready', backend: 'webgpu', modelId: 'test/model' });
+  becomeReady(model = DEFAULT_MODEL.id): void {
+    this.emit({ type: 'ready', backend: 'webgpu', model });
+  }
+  lastInitialize(): WorkerCommand & { type: 'initialize' } {
+    const command = [...this.commands].reverse().find((c) => c.type === 'initialize');
+    if (!command || command.type !== 'initialize') throw new Error('no initialize command sent');
+    return command;
   }
 }
 
@@ -36,6 +49,21 @@ function q<T extends Element>(selector: string): T | null {
 }
 function all(selector: string): Element[] {
   return [...document.body.querySelectorAll(selector)];
+}
+/** The plate's load action, which is labelled with the selected model. */
+function loadButton(): HTMLButtonElement | undefined {
+  return all('.plate__cta')[0] as HTMLButtonElement | undefined;
+}
+/** The radio row for one catalog model inside the first-run card. */
+function modelOption(id: string): HTMLInputElement {
+  return document.body.querySelector<HTMLInputElement>(
+    `.plate .model-option__input[value="${id}"], .model-menu .model-option__input[value="${id}"]`,
+  )!;
+}
+function chooseModel(id: string): void {
+  const input = modelOption(id);
+  input.checked = true;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 function byText(selector: string, text: string): HTMLElement | undefined {
   return all(selector).find((n) => n.textContent?.trim() === text) as HTMLElement | undefined;
@@ -58,6 +86,7 @@ async function mount(): Promise<void> {
 let repo: MemoryChatRepository;
 
 beforeEach(() => {
+  localStorage.clear();
   repo = new MemoryChatRepository();
   ScriptedWorker.latest = undefined;
 });
@@ -71,9 +100,41 @@ describe('WebGPT app', () => {
   it('renders the empty state with starter prompts and a load action', async () => {
     await mount();
     expect(q('.plate__title')).not.toBeNull();
+    expect(q('.plate__title')!.textContent).toContain(DEFAULT_MODEL.name);
+    expect(q('.status__label')!.textContent).toContain(`${DEFAULT_MODEL.name} · not loaded`);
     expect(all('.starter')).toHaveLength(4);
-    expect(byText('button', 'Load model')).toBeDefined();
+    expect(loadButton()).toBeDefined();
     expect(ScriptedWorker.latest).toBeUndefined();
+  });
+
+  it('uses the default before loading, then persists a switch until the user explicitly loads it', async () => {
+    await mount();
+    expect(q('.plate__title')!.textContent).toContain(DEFAULT_MODEL.name);
+
+    loadButton()!.click();
+    const firstWorker = ScriptedWorker.latest!;
+    firstWorker.becomeReady();
+    await flush();
+
+    chooseModel(OTHER_MODEL.id);
+    await flush();
+    expect(firstWorker.terminated).toBe(true);
+    expect(localStorage.getItem(MODEL_PREFERENCE_KEY)).toBe(OTHER_MODEL.id);
+    expect(q('.plate__title')!.textContent).toContain(OTHER_MODEL.name);
+    expect(q<HTMLTextAreaElement>('.composer__input')!.disabled).toBe(true);
+    expect(ScriptedWorker.latest).toBe(firstWorker);
+
+    loadButton()!.click();
+    expect(ScriptedWorker.latest).not.toBe(firstWorker);
+    expect(ScriptedWorker.latest!.lastInitialize().model).toBe(OTHER_MODEL.id);
+    ScriptedWorker.latest!.becomeReady(OTHER_MODEL.id);
+    await flush();
+    expect(q('.model-menu__toggle')!.textContent).toContain(OTHER_MODEL.name);
+
+    app.destroy();
+    root.remove();
+    await mount();
+    expect(q('.plate__title')!.textContent).toContain(OTHER_MODEL.name);
   });
 
   it('keeps the composer disabled until the runtime reports ready', async () => {
@@ -81,7 +142,7 @@ describe('WebGPT app', () => {
     const input = q<HTMLTextAreaElement>('.composer__input')!;
     expect(input.disabled).toBe(true);
 
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     await flush();
     expect(ScriptedWorker.latest!.commands[0]).toMatchObject({ type: 'initialize' });
     expect(q('.status')!.getAttribute('data-state')).toBe('loading');
@@ -94,7 +155,7 @@ describe('WebGPT app', () => {
 
   it('shows aggregated download progress while files load', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.emit({ type: 'progress', file: 'a.onnx', loaded: 25, total: 100 });
     ScriptedWorker.latest!.emit({ type: 'progress', file: 'b.onnx', loaded: 75, total: 100 });
     await flush();
@@ -102,9 +163,27 @@ describe('WebGPT app', () => {
     expect(q('.status__bar')).not.toBeNull();
   });
 
+  it('shows selected and loaded runtime facts in the accessible Technical sidebar disclosure', async () => {
+    await mount();
+    const technical = q<HTMLDetailsElement>('.technical-panel')!;
+    expect(technical).not.toBeNull();
+    expect(technical.open).toBe(false);
+    expect(technical.textContent).toContain('Selected model');
+    expect(technical.textContent).toContain(DEFAULT_MODEL.modelId);
+    expect(technical.textContent).toContain('Not loaded');
+    expect(technical.textContent).toContain('GPU memory is not exposed to normal WebGPU pages.');
+    expect(all('.technical-panel__metric')).toHaveLength(3);
+
+    loadButton()!.click();
+    ScriptedWorker.latest!.becomeReady();
+    await flush();
+    expect(technical.textContent).toContain('WebGPU');
+    expect(technical.textContent).toContain('Loaded model');
+  });
+
   it('streams a reply into the conversation and renders it safely', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.becomeReady();
     await flush();
 
@@ -132,7 +211,7 @@ describe('WebGPT app', () => {
 
   it('sends only the trimmed text and clears the composer', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.becomeReady();
     await flush();
     const input = q<HTMLTextAreaElement>('.composer__input')!;
@@ -145,7 +224,7 @@ describe('WebGPT app', () => {
 
   it('sends on Enter and inserts a newline on Shift+Enter', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.becomeReady();
     await flush();
 
@@ -166,7 +245,7 @@ describe('WebGPT app', () => {
 
   it('turns Send into Stop while generating and keeps the partial reply', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.becomeReady();
     await flush();
 
@@ -197,7 +276,7 @@ describe('WebGPT app', () => {
 
   it('offers retry after a generation error and reuses the same prompt', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.becomeReady();
     await flush();
 
@@ -229,7 +308,7 @@ describe('WebGPT app', () => {
 
   it('shows a recoverable error state when the model fails to load', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.emit({ type: 'error', code: 'load-failed', message: 'network gone' });
     await flush();
     expect(q('.status')!.getAttribute('data-state')).toBe('error');
@@ -239,11 +318,11 @@ describe('WebGPT app', () => {
 
   it('warns honestly when it falls back to the CPU backend', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.emit({
       type: 'ready',
       backend: 'wasm',
-      modelId: 'test/model',
+      model: DEFAULT_MODEL.id,
       warning: 'WebGPU is unavailable, so WebGPT is running on the CPU (WASM).',
     });
     await flush();
@@ -253,7 +332,7 @@ describe('WebGPT app', () => {
 
   it('creates, lists and renames conversations in the sidebar', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.becomeReady();
     await flush();
 
@@ -279,7 +358,7 @@ describe('WebGPT app', () => {
 
   it('restores conversations from the repository across a remount', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.becomeReady();
     await flush();
 
@@ -302,7 +381,7 @@ describe('WebGPT app', () => {
 
   it('does not render tokens from another chat into the visible conversation', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.becomeReady();
     await flush();
 
@@ -329,7 +408,7 @@ describe('WebGPT app', () => {
 
   it('blocks a second send while a generation is in flight', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.becomeReady();
     await flush();
 
@@ -356,7 +435,7 @@ describe('WebGPT app', () => {
 
   it('sends a starter prompt directly once the model is ready', async () => {
     await mount();
-    byText('button', 'Load model')!.click();
+    loadButton()!.click();
     ScriptedWorker.latest!.becomeReady();
     await flush();
     all('.starter')[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));

@@ -12,7 +12,8 @@ export default defineConfig({
   webServer: {
     command: 'npm run build && npm run preview',
     url: 'http://localhost:4173',
-    reuseExistingServer: !process.env.CI,
+    // E2E must own the preview server: a stale build must never satisfy tests.
+    reuseExistingServer: false,
     timeout: 180_000,
   },
 });

@@ -34,7 +34,7 @@ export function installMockWorker(options: { backend?: 'webgpu' | 'wasm'; failLo
                 this.emit({
                   type: 'ready',
                   backend: config.backend,
-                  modelId: 'mock/model',
+                  model: command.model,
                   ...(config.backend === 'wasm'
                     ? { warning: 'WebGPU is unavailable, so WebGPT is running on the CPU (WASM). Replies will be noticeably slower.' }
                     : {}),

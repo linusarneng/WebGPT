@@ -1,3 +1,4 @@
+import type { ModelId } from '../config/model';
 import type {
   Backend,
   GenerateRequest,
@@ -30,6 +31,7 @@ export class InferenceClient {
   private backend: Backend | undefined;
   private error: string | undefined;
   private warning: string | undefined;
+  private loadedModel: ModelId | undefined;
   private readonly listeners = new Set<Listener>();
   private readonly pending = new Map<string, PendingGeneration>();
 
@@ -56,8 +58,13 @@ export class InferenceClient {
     return this.warning;
   }
 
-  /** Spawns the worker on first call and asks it to load the model. Safe to retry. */
-  initialize(): void {
+  /** The model currently resident in the worker, if the load finished. */
+  getLoadedModel(): ModelId | undefined {
+    return this.loadedModel;
+  }
+
+  /** Spawns the worker on first call and asks it to load `model`. Safe to retry. */
+  initialize(model: ModelId): void {
     this.error = undefined;
     this.status = 'loading';
     if (!this.worker) {
@@ -65,7 +72,7 @@ export class InferenceClient {
       this.worker.addEventListener('message', this.handleMessage);
       this.worker.addEventListener('error', this.handleCrash);
     }
-    this.post({ type: 'initialize' });
+    this.post({ type: 'initialize', model });
     this.emit({ type: 'status', status: 'loading' });
   }
 
@@ -84,7 +91,21 @@ export class InferenceClient {
     this.post({ type: 'abort', requestId });
   }
 
+  /**
+   * Drops the worker and everything it held, so the next `initialize` builds one
+   * pipeline from scratch. This is how a model switch releases the previous
+   * model's memory instead of stacking a second pipeline beside it.
+   */
+  reset(): void {
+    this.teardown();
+    this.emit({ type: 'status', status: 'idle' });
+  }
+
   dispose(): void {
+    this.teardown();
+  }
+
+  private teardown(): void {
     this.settleAll('Inference worker was shut down.');
     this.worker?.removeEventListener('message', this.handleMessage);
     this.worker?.removeEventListener('error', this.handleCrash);
@@ -93,6 +114,8 @@ export class InferenceClient {
     this.status = 'idle';
     this.backend = undefined;
     this.error = undefined;
+    this.warning = undefined;
+    this.loadedModel = undefined;
   }
 
   private post(command: WorkerCommand): void {
@@ -127,6 +150,7 @@ export class InferenceClient {
         this.status = 'ready';
         this.backend = event.backend;
         this.warning = event.warning;
+        this.loadedModel = event.model;
         this.error = undefined;
         break;
       case 'token': {

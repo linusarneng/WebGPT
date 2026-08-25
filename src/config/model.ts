@@ -1,6 +1,11 @@
 /**
- * Single source of truth for which model WebGPT runs and how it is prompted.
- * Swapping models should only require edits in this file.
+ * The curated catalog of models WebGPT can run, plus the generation settings
+ * shared by all of them. Adding or retiring a model is an edit to this file
+ * only; every other module resolves models through `getModel`.
+ *
+ * Every repo below publishes ONNX weights and is documented for Transformers.js
+ * browser use. Sizes are the on-disk size of the WebGPU-path weight file in the
+ * repo, rounded — not a benchmark or a promise about speed.
  */
 
 export interface ChatMessage {
@@ -8,42 +13,97 @@ export interface ChatMessage {
   content: string;
 }
 
+export type ModelId = 'qwen2.5-0.5b-instruct' | 'granite-4.0-350m' | 'qwen3-0.6b';
+
 export interface ModelConfig {
+  /** Stable key used in the UI and in the stored preference. */
+  readonly id: ModelId;
   /** Hugging Face repo id. Verified to publish ONNX weights for browser use. */
   readonly modelId: string;
+  /** Human name, as a person would say it. */
+  readonly name: string;
+  /** The practical trade-off this option represents. */
+  readonly tradeoff: string;
+  /** One sentence on when to pick it. No benchmarks, no timings. */
+  readonly summary: string;
   /** Quantisation used when WebGPU is available. */
   readonly webgpuDtype: 'q4f16' | 'fp16' | 'q4';
   /** Quantisation used on the slower WASM fallback path. */
   readonly wasmDtype: 'q4' | 'q8' | 'int8';
-  readonly systemPrompt: string;
-  readonly maxNewTokens: number;
-  readonly temperature: number;
-  readonly topP: number;
-  /**
-   * How many trailing conversation messages are replayed to the model.
-   * The system prompt is always kept on top of this budget.
-   */
-  readonly maxHistoryMessages: number;
-  /** Approximate download size, shown before the user opts into the download. */
+  /** Approximate first download, shown before the user opts into it. */
   readonly approximateDownloadMb: number;
 }
 
-export const MODEL_CONFIG: ModelConfig = {
-  modelId: 'onnx-community/Qwen2.5-0.5B-Instruct',
-  webgpuDtype: 'q4f16',
-  wasmDtype: 'q4',
+/** Generation behaviour is a property of WebGPT, not of any one model. */
+export const GENERATION = {
   systemPrompt:
     'You are WebGPT, a small assistant running entirely inside the user\'s web browser. ' +
     'Answer clearly and concisely. If you are unsure, say so rather than inventing details.',
   maxNewTokens: 512,
   temperature: 0.7,
   topP: 0.9,
+  /**
+   * How many trailing conversation messages are replayed to the model.
+   * The system prompt is always kept on top of this budget.
+   */
   maxHistoryMessages: 12,
-  approximateDownloadMb: 500,
-};
+} as const;
+
+export const DEFAULT_MODEL_ID: ModelId = 'qwen2.5-0.5b-instruct';
+
+export const MODEL_CATALOG: readonly ModelConfig[] = [
+  {
+    id: 'qwen2.5-0.5b-instruct',
+    modelId: 'onnx-community/Qwen2.5-0.5B-Instruct',
+    name: 'Qwen2.5 0.5B Instruct',
+    tradeoff: 'Recommended balance',
+    summary: 'The steady choice: answers general questions and short writing tasks.',
+    webgpuDtype: 'q4f16',
+    wasmDtype: 'q4',
+    approximateDownloadMb: 500,
+  },
+  {
+    id: 'granite-4.0-350m',
+    modelId: 'onnx-community/granite-4.0-350m-ONNX-web',
+    name: 'Granite 4.0 350M',
+    tradeoff: 'Smallest download',
+    summary: 'IBM\'s compact instruct model: the quickest to fetch and the lightest to run.',
+    webgpuDtype: 'q4f16',
+    wasmDtype: 'q4',
+    approximateDownloadMb: 360,
+  },
+  {
+    id: 'qwen3-0.6b',
+    modelId: 'onnx-community/Qwen3-0.6B-ONNX',
+    name: 'Qwen3 0.6B',
+    tradeoff: 'Most capable',
+    summary: 'The newest and largest of the three: more headroom on longer, harder prompts.',
+    webgpuDtype: 'q4f16',
+    wasmDtype: 'q4',
+    approximateDownloadMb: 590,
+  },
+];
+
+export function isModelId(value: unknown): value is ModelId {
+  return MODEL_CATALOG.some((model) => model.id === value);
+}
+
+export function getDefaultModel(): ModelConfig {
+  return MODEL_CATALOG.find((model) => model.id === DEFAULT_MODEL_ID)!;
+}
+
+/** Resolves any stored or messaged id, falling back to the default. */
+export function getModel(id: string | null | undefined): ModelConfig {
+  return MODEL_CATALOG.find((model) => model.id === id) ?? getDefaultModel();
+}
+
+/** Short model name for chips and headings, e.g. `Qwen2.5 0.5B Instruct`. */
+export function shortName(model: ModelConfig): string {
+  return model.name;
+}
 
 /** Builds the bounded message list sent to the model for one generation. */
 export function buildPromptMessages(history: readonly ChatMessage[]): ChatMessage[] {
-  const recent = history.slice(-MODEL_CONFIG.maxHistoryMessages);
-  return [{ role: 'system', content: MODEL_CONFIG.systemPrompt }, ...recent];
+  const recent = history.slice(-GENERATION.maxHistoryMessages);
+  return [{ role: 'system', content: GENERATION.systemPrompt }, ...recent];
 }

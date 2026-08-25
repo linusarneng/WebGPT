@@ -1,4 +1,4 @@
-import { MODEL_CONFIG } from '../config/model';
+import type { ModelConfig } from '../config/model';
 import type { Backend, LoadPhase, RuntimeStatus } from '../inference/protocol';
 import { el } from './dom';
 
@@ -8,6 +8,8 @@ export interface ModelStatusView {
 }
 
 export interface ModelStatusState {
+  /** The model this status is about: the loaded one, or the pending choice. */
+  model: ModelConfig;
   status: RuntimeStatus;
   backend?: Backend;
   detail?: string;
@@ -31,9 +33,6 @@ export const LOAD_PHASES: readonly { id: LoadPhase; label: string }[] = [
   { id: 'ready', label: 'Ready' },
 ];
 
-/** Short model name, e.g. `Qwen2.5-0.5B-Instruct`, without the publishing org. */
-export const MODEL_NAME = MODEL_CONFIG.modelId.split('/').pop() ?? MODEL_CONFIG.modelId;
-
 /**
  * Older workers only send a `detail` string. Bytes on the wire are the one
  * unambiguous signal that the download has actually started, so fall back to it
@@ -46,15 +45,15 @@ export function phaseOf(state: ModelStatusState): LoadPhase | 'idle' | 'error' {
   return state.phase ?? (state.percent !== undefined ? 'downloading' : 'checking');
 }
 
-function label(state: ModelStatusState): string {
+export function statusLabel(state: ModelStatusState): string {
   const phase = phaseOf(state);
   switch (phase) {
     case 'idle':
-      return 'Model not loaded';
+      return `${state.model.name} · not loaded`;
     case 'error':
       return 'Model unavailable';
     case 'ready':
-      return `${MODEL_NAME} · ${BACKEND_LABEL[state.backend ?? 'wasm']}`;
+      return `${state.model.name} · ${BACKEND_LABEL[state.backend ?? 'wasm']}`;
     case 'downloading':
       return state.percent !== undefined
         ? `Downloading model · ${Math.round(state.percent)}%`
@@ -64,11 +63,21 @@ function label(state: ModelStatusState): string {
   }
 }
 
-/** The compact runtime chip in the top bar. */
-export function createModelStatus(): ModelStatusView {
+export function statusTitle(state: ModelStatusState): string {
+  return state.status === 'error'
+    ? (state.error ?? 'The local model could not be loaded.')
+    : `${state.model.modelId} runs entirely in this browser tab.`;
+}
+
+/**
+ * The compact runtime chip. `host` lets the top bar pass its own disclosure
+ * button in as the chip, so the live region wraps the control people click.
+ */
+export function createModelStatus(host?: HTMLElement): ModelStatusView {
   const dot = el('span', { class: 'status__dot', 'aria-hidden': 'true' });
   const text = el('span', { class: 'status__label' });
-  const chip = el('span', { class: 'status__chip' }, [dot, text]);
+  const chip = host ?? el('span', { class: 'status__chip' });
+  chip.append(dot, text);
   const progressFill = el('span', { class: 'status__fill', style: 'width:0%' });
   const progress = el(
     'span',
@@ -83,11 +92,8 @@ export function createModelStatus(): ModelStatusView {
       const phase = phaseOf(state);
       element.dataset.state = state.status;
       element.dataset.phase = phase;
-      text.textContent = label(state);
-      chip.title =
-        state.status === 'error'
-          ? (state.error ?? 'The local model could not be loaded.')
-          : `${MODEL_CONFIG.modelId} runs entirely in this browser tab.`;
+      text.textContent = statusLabel(state);
+      chip.title = statusTitle(state);
 
       // A bar only appears where real byte counts back it: never during the
       // device check or model preparation, which have no measurable progress.

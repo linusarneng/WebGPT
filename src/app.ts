@@ -1,11 +1,15 @@
+import { getModel, type ModelId } from './config/model';
 import { InferenceClient, type WorkerFactory } from './inference/inference-client';
 import type { WorkerEvent } from './inference/protocol';
 import { ChatStore } from './state/chat-store';
 import { createChatRepository, MemoryChatRepository, type ChatRepository } from './storage/chat-repository';
+import { createModelPreference, type ModelPreference } from './storage/model-preference';
+import { createGenerationTelemetry } from './telemetry/runtime-telemetry';
 import { createAppShell } from './ui/app-shell';
 import { createChatView } from './ui/chat-view';
 import { createComposer } from './ui/composer';
-import { createModelStatus, type ModelStatusState } from './ui/model-status';
+import { createModelMenu } from './ui/model-menu';
+import type { ModelStatusState } from './ui/model-status';
 import { createSidebar } from './ui/sidebar';
 import { createId } from './utils/ids';
 
@@ -13,6 +17,7 @@ export interface AppOptions {
   root: HTMLElement;
   repository?: ChatRepository;
   workerFactory?: WorkerFactory;
+  modelPreference?: ModelPreference;
 }
 
 export interface App {
@@ -48,14 +53,21 @@ export async function createApp(options: AppOptions): Promise<App> {
   const repository = options.repository ?? (await createChatRepository());
   const store = new ChatStore(repository);
   const client = new InferenceClient(options.workerFactory);
+  const modelPreference = options.modelPreference ?? createModelPreference();
   const progress = new DownloadProgress();
+  const generation = createGenerationTelemetry();
 
-  let runtime: ModelStatusState = { status: 'idle' };
+  let selectedId: ModelId = modelPreference.get();
+  let loadedId: ModelId | undefined;
+  let runtime: Omit<ModelStatusState, 'model'> = { status: 'idle' };
   let runtimeWarning: string | undefined;
   /** Request id of the generation currently owned by the UI, if any. */
   let activeRequestId: string | undefined;
 
-  const status = createModelStatus();
+  const status = createModelMenu({
+    onSelect: (id) => selectModel(id),
+    onLoad: () => loadSelectedModel(),
+  });
 
   const sidebar = createSidebar({
     onNewChat: () => {
@@ -77,15 +89,15 @@ export async function createApp(options: AppOptions): Promise<App> {
       if (runtime.status !== 'ready') {
         composer.setValue(prompt);
         composer.focus();
-        if (runtime.status === 'idle') client.initialize();
+        if (runtime.status === 'idle') loadSelectedModel();
         return;
       }
       void send(prompt);
     },
     onLoadModel: () => {
-      progress.reset();
-      client.initialize();
+      loadSelectedModel();
     },
+    onSelectModel: (id) => selectModel(id),
     onRetry: (messageId) => {
       const chatId = store.getState().activeId;
       if (!chatId) return;
@@ -126,8 +138,23 @@ export async function createApp(options: AppOptions): Promise<App> {
     const state = store.getState();
     const conversation = store.getActiveConversation();
     sidebar.render(state.conversations, state.activeId);
+    sidebar.renderTechnical({
+      selectedId,
+      loadedId,
+      backend: runtime.backend,
+      status: runtime.status,
+      phase: runtime.phase,
+      progress: runtime.percent,
+      error: runtime.error,
+      generation: generation.snapshot(globalThis.performance.now()),
+    });
     chatView.render({
       conversation,
+      model: getModel(loadedId ?? selectedId),
+      selectedId,
+      loadedId,
+      locked: store.isGenerating(),
+      lockReason: store.isGenerating() ? 'Stop the reply before changing models.' : undefined,
       runtimeStatus: runtime.status,
       runtimeError: runtime.error,
       runtimeWarning,
@@ -140,7 +167,14 @@ export async function createApp(options: AppOptions): Promise<App> {
       disabled: runtime.status !== 'ready',
       placeholder: placeholder(),
     });
-    status.render(runtime);
+    status.render({
+      ...runtime,
+      model: getModel(loadedId ?? selectedId),
+      selectedId,
+      loadedId,
+      locked: store.isGenerating(),
+      lockReason: store.isGenerating() ? 'Stop the reply before changing models.' : undefined,
+    });
     shell.setTitle(conversation?.title ?? 'New chat');
   }
 
@@ -148,6 +182,7 @@ export async function createApp(options: AppOptions): Promise<App> {
   async function run(chatId: string, assistantId: string): Promise<void> {
     const requestId = createId('req');
     activeRequestId = requestId;
+    generation.start(globalThis.performance.now());
     store.markGenerating(chatId, assistantId);
     render();
 
@@ -166,6 +201,7 @@ export async function createApp(options: AppOptions): Promise<App> {
         error instanceof Error ? error.message : 'Generation failed.',
       );
     } finally {
+      generation.finish(globalThis.performance.now());
       if (activeRequestId === requestId) activeRequestId = undefined;
       void store.flush();
       render();
@@ -178,6 +214,27 @@ export async function createApp(options: AppOptions): Promise<App> {
     const chatId = store.getState().activeId ?? store.newConversation();
     const { assistantId } = store.startExchange(text, chatId);
     await run(chatId, assistantId);
+  }
+
+  /** A new selection releases model memory but leaves local conversations intact. */
+  function selectModel(id: ModelId): void {
+    if (store.isGenerating() || id === selectedId) return;
+    selectedId = id;
+    modelPreference.set(id);
+    loadedId = undefined;
+    runtimeWarning = undefined;
+    progress.reset();
+    runtime = { status: 'idle' };
+    client.reset();
+    render();
+  }
+
+  /** Loading is always explicit, including after a model switch. */
+  function loadSelectedModel(): void {
+    if (store.isGenerating() || runtime.status === 'loading') return;
+    progress.reset();
+    runtimeWarning = undefined;
+    client.initialize(selectedId);
   }
 
   const unsubscribeStore = store.subscribe(render);
@@ -194,8 +251,12 @@ export async function createApp(options: AppOptions): Promise<App> {
       case 'ready':
         progress.reset();
         runtimeWarning = event.warning;
+        loadedId = event.model;
         runtime = { status: 'ready', backend: event.backend };
         composer.focus();
+        break;
+      case 'token-count':
+        if (event.requestId === activeRequestId) generation.recordTokens(event.count, globalThis.performance.now());
         break;
       case 'error':
         if (!event.requestId) runtime = { status: 'error', error: event.message };
@@ -217,6 +278,7 @@ export async function createApp(options: AppOptions): Promise<App> {
       unsubscribeStore();
       unsubscribeClient();
       globalThis.removeEventListener?.('beforeunload', handleUnload);
+      sidebar.destroy();
       client.dispose();
       options.root.replaceChildren();
     },
