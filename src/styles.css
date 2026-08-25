@@ -1,0 +1,1173 @@
+/* ==========================================================================
+   WebGPT design system
+
+   A warm-paper workspace: the sidebar is the desk, the conversation is a sheet
+   of paper resting on it. Every machine fact — model id, load phase, runtime,
+   percentage — is typeset in the mono utility face; everything a person wrote
+   or reads is typeset as prose. That split is the whole type idea.
+   ========================================================================== */
+
+:root {
+  --canvas: #faf9f5;
+  --surface: #ffffff;
+  --surface-sunken: #f3f1ea;
+  --surface-hover: #f7f5ef;
+
+  --line: #e3e0d6;
+  --line-soft: #eeebe3;
+
+  --ink: #1b1d1a;
+  --ink-muted: #5c6159;
+  --ink-faint: #8b9086;
+
+  --accent: #14624a;
+  --accent-hover: #0e4b38;
+  --accent-wash: #ecf2ef;
+  --accent-line: #cbdcd4;
+
+  --danger: #9d3722;
+  --danger-wash: #fbf0ed;
+  --warn-wash: #faf3e3;
+  --warn-line: #e8dcc0;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+
+  --sidebar-width: 264px;
+  --content-width: 44rem;
+
+  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  --shadow-sm: 0 1px 2px rgba(27, 29, 26, 0.05);
+  --shadow: 0 1px 2px rgba(27, 29, 26, 0.04), 0 8px 24px -12px rgba(27, 29, 26, 0.16);
+  --speed: 150ms;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15.5px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: currentColor;
+}
+
+/* The mono utility face, used for every machine-reported fact. */
+.status__label,
+.spec__term,
+.plate__eyebrow,
+.phase,
+.message__role,
+.chat-item__meta,
+.sidebar__label {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------- shell -- */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  height: 100%;
+  background: var(--canvas);
+}
+
+.main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  height: 56px;
+  border-bottom: 1px solid var(--line-soft);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.topbar__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn--menu {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.btn--menu:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.scrim {
+  display: none;
+}
+
+/* -------------------------------------------------------------- sidebar -- */
+
+.sidebar {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-height: 0;
+  background: var(--canvas);
+}
+
+.sidebar__head {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 18px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.brand__mark {
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border-radius: 6px;
+  background: var(--accent);
+  fill: #fff;
+}
+
+.brand__name {
+  font-size: 15px;
+  font-weight: 640;
+  letter-spacing: -0.015em;
+}
+
+.sidebar__new {
+  padding: 0 12px 10px;
+}
+
+.new-chat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  font-size: 14px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--speed), border-color var(--speed);
+}
+
+.new-chat:hover {
+  background: var(--surface-hover);
+  border-color: var(--line);
+}
+
+.new-chat .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+
+.sidebar__body {
+  min-height: 0;
+  padding: 4px 12px 12px;
+  overflow-y: auto;
+}
+
+.sidebar__label {
+  margin: 8px 4px 8px;
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+.chat-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-list__empty {
+  padding: 8px 4px;
+  color: var(--ink-faint);
+  font-size: 13.5px;
+}
+
+.chat-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  transition: background var(--speed);
+}
+
+.chat-item:hover {
+  background: var(--surface-hover);
+}
+
+.chat-item[aria-current='true'] {
+  background: var(--accent-wash);
+}
+
+/* A hairline spine marks the open conversation without adding a coloured slab. */
+.chat-item[aria-current='true']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.chat-item__select {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  padding: 7px 8px 8px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-item__title {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chat-item[aria-current='true'] .chat-item__title {
+  font-weight: 600;
+}
+
+.chat-item__meta {
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.chat-item__actions {
+  display: flex;
+  gap: 2px;
+  padding-right: 6px;
+  opacity: 0;
+  transition: opacity var(--speed);
+}
+
+.chat-item:hover .chat-item__actions,
+.chat-item:focus-within .chat-item__actions {
+  opacity: 1;
+}
+
+.chat-item__action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.chat-item__action .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.chat-item__action:hover {
+  background: rgba(27, 29, 26, 0.07);
+  color: var(--ink);
+}
+
+.chat-item__rename-form {
+  flex: 1;
+  padding: 4px 6px;
+}
+
+.chat-item__rename-input {
+  width: 100%;
+  padding: 5px 7px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13.5px;
+}
+
+.sidebar__foot {
+  padding: 12px 18px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--ink-faint);
+  font-size: 11.5px;
+}
+
+/* --------------------------------------------------------- status chip -- */
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+.status[data-state='ready'] .status__chip {
+  border-color: var(--accent-line);
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.status[data-state='ready'] .status__dot {
+  background: var(--accent);
+}
+
+.status[data-state='loading'] .status__dot {
+  background: var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.status[data-state='error'] .status__chip {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--line));
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+.status[data-state='error'] .status__dot {
+  background: var(--danger);
+}
+
+.status__bar {
+  width: 60px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.status__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 260ms ease-out;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* --------------------------------------------------------- conversation -- */
+
+.conversation {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.conversation:focus-visible {
+  outline-offset: -2px;
+}
+
+.conversation__inner {
+  width: min(100%, var(--content-width));
+  margin: 0 auto;
+  padding: 28px 24px 8px;
+}
+
+.message-list {
+  display: grid;
+  gap: 30px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.message {
+  display: grid;
+  gap: 7px;
+}
+
+.message__role {
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+.message--user .message__role {
+  color: var(--accent);
+}
+
+.message__body {
+  min-width: 0;
+}
+
+/* The person's turn is a card; the model's turn is plain prose on the page.
+   The asymmetry is the point: one is an utterance, the other is a document. */
+.message--user .message__body {
+  padding: 11px 15px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.message__thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 14px;
+}
+
+.message__pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.message__cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: blink 1.05s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.message__note {
+  margin: 4px 0 0;
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+.message__note--error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, var(--line));
+  border-radius: var(--radius-sm);
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+.message__actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  opacity: 0;
+  transition: opacity var(--speed);
+}
+
+.message:hover .message__actions,
+.message:focus-within .message__actions {
+  opacity: 1;
+}
+
+.msg-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background var(--speed), color var(--speed);
+}
+
+.msg-action .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.msg-action:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.msg-action[data-done] {
+  color: var(--accent);
+}
+
+/* Keyboard users cannot hover, so the actions must surface on focus. */
+.msg-action:focus-visible {
+  opacity: 1;
+}
+
+/* ----------------------------------------------------------- rich text -- */
+
+.rich-text > *:first-child {
+  margin-top: 0;
+}
+
+.rich-text > *:last-child {
+  margin-bottom: 0;
+}
+
+.rich-text p,
+.rich-text ul,
+.rich-text ol {
+  margin: 0 0 0.85em;
+}
+
+.rich-text ul,
+.rich-text ol {
+  padding-left: 1.3em;
+}
+
+.rich-text li {
+  margin-bottom: 0.25em;
+}
+
+.inline-code {
+  padding: 1.5px 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--surface-sunken);
+  font-family: var(--font-mono);
+  font-size: 0.87em;
+}
+
+.code-block {
+  margin: 0 0 0.9em;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-x: auto;
+}
+
+/* ---------------------------------------------------------- empty state -- */
+
+.empty {
+  display: grid;
+  gap: 26px;
+  padding: 12px 0 24px;
+}
+
+.empty__title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 620;
+  letter-spacing: -0.022em;
+}
+
+.empty__subtitle {
+  margin: -16px 0 0;
+  max-width: 34rem;
+  color: var(--ink-muted);
+  font-size: 14.5px;
+}
+
+.empty__prompts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.starter {
+  display: grid;
+  gap: 2px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--speed), border-color var(--speed), transform var(--speed);
+}
+
+.starter:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent-line);
+  transform: translateY(-1px);
+}
+
+.starter__label {
+  font-size: 13.5px;
+  font-weight: 550;
+}
+
+.starter__hint {
+  color: var(--ink-faint);
+  font-size: 12.5px;
+}
+
+/* ------------------------------------------------------- install plate -- */
+/* The model's identity card. Pre-load it is the hero; once the model is
+   resident it retires and the top-bar chip carries the same facts. */
+
+.plate {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.plate__eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.plate__title {
+  margin: -8px 0 0;
+  font-size: 27px;
+  font-weight: 620;
+  line-height: 1.2;
+  letter-spacing: -0.024em;
+}
+
+.plate__specs {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.spec {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.spec__term {
+  color: var(--ink-faint);
+  font-weight: 500;
+  line-height: 1.9;
+}
+
+.spec__value {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.plate__note {
+  margin: 0;
+  max-width: 36rem;
+  color: var(--ink-muted);
+  font-size: 13.5px;
+}
+
+.plate__cta {
+  justify-self: start;
+  padding: 10px 20px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 560;
+  cursor: pointer;
+  transition: background var(--speed), transform var(--speed);
+}
+
+.plate__cta:hover {
+  background: var(--accent-hover);
+}
+
+.plate__cta:active {
+  transform: translateY(1px);
+}
+
+/* The phase rail: four named stages, with nothing invented in between. */
+.plate__rail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phase {
+  padding-top: 11px;
+  border-top: 2px solid var(--line);
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  line-height: 1.35;
+  transition: color var(--speed), border-color var(--speed);
+}
+
+.phase[data-state='done'] {
+  border-top-color: var(--accent);
+  color: var(--ink-muted);
+}
+
+.phase[data-state='active'] {
+  border-top-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.phase[data-state='active']::after {
+  content: '';
+  display: block;
+  width: 5px;
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.plate__meter {
+  height: 4px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.plate__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 300ms ease-out;
+}
+
+/* ------------------------------------------------------------- notices -- */
+
+.notice {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  font-size: 13.5px;
+}
+
+.notice__text {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.notice--warn {
+  border-color: var(--warn-line);
+  background: var(--warn-wash);
+}
+
+.notice--error {
+  border-color: color-mix(in srgb, var(--danger) 24%, var(--line));
+  background: var(--danger-wash);
+}
+
+.notice--error .notice__text {
+  color: var(--danger);
+}
+
+.notice__details {
+  width: 100%;
+  font-size: 12.5px;
+}
+
+.notice__details summary {
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.notice__cause {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.notice__action {
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13.5px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.notice__action:hover {
+  background: var(--surface-hover);
+}
+
+/* Inside the empty state the notice sits in the flow, not above it. */
+.empty .notice {
+  margin-bottom: 0;
+}
+
+/* ------------------------------------------------------------ composer -- */
+
+.composer-region {
+  padding: 10px 24px 18px;
+  background: linear-gradient(to top, var(--surface) 62%, transparent);
+}
+
+.composer {
+  width: min(100%, var(--content-width));
+  margin: 0 auto;
+}
+
+.composer__field {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition: border-color var(--speed), box-shadow var(--speed);
+}
+
+.composer:focus-within .composer__field {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow), 0 0 0 3px var(--accent-wash);
+}
+
+.composer[data-state='locked'] .composer__field {
+  border-style: dashed;
+  background: var(--surface-sunken);
+  box-shadow: none;
+}
+
+.composer__input {
+  flex: 1;
+  min-width: 0;
+  max-height: 200px;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.composer__input:focus {
+  outline: none;
+}
+
+.composer__input::placeholder {
+  color: var(--ink-faint);
+}
+
+.composer__input:disabled {
+  cursor: not-allowed;
+}
+
+.composer__send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: background var(--speed), transform var(--speed), opacity var(--speed);
+}
+
+.composer__send:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.composer__send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.composer__send:disabled {
+  border-color: var(--line);
+  background: var(--surface-sunken);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+/* One button, two jobs: only the icon for the current job is drawn. */
+.icon--stop {
+  display: none;
+}
+
+.composer[data-state='generating'] .composer__send {
+  border-color: var(--line);
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.composer[data-state='generating'] .icon--send {
+  display: none;
+}
+
+.composer[data-state='generating'] .icon--stop {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.composer__hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 6px 0;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+}
+
+.composer__status {
+  color: var(--accent);
+}
+
+.composer__keys kbd {
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+/* --------------------------------------------------------- narrow view -- */
+
+@media (max-width: 860px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .main {
+    border-left: 0;
+  }
+
+  .btn--menu {
+    display: inline-flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    z-index: 3;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(84vw, var(--sidebar-width));
+    border-right: 1px solid var(--line);
+    box-shadow: 0 0 40px rgba(27, 29, 26, 0.14);
+    transform: translateX(-102%);
+    visibility: hidden;
+    transition: transform 220ms ease, visibility 220ms;
+  }
+
+  .app[data-drawer='open'] .sidebar {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .app[data-drawer='open'] .scrim {
+    display: block;
+    position: fixed;
+    z-index: 2;
+    inset: 0;
+    border: 0;
+    background: rgba(27, 29, 26, 0.32);
+  }
+
+  .conversation__inner,
+  .composer-region {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .composer-region {
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+  }
+
+  .empty__prompts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plate {
+    padding: 20px 18px;
+    border-radius: var(--radius);
+  }
+
+  .plate__title {
+    font-size: 22px;
+  }
+
+  .spec {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .spec__term {
+    line-height: 1.5;
+  }
+
+  .plate__rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+  }
+
+  /* Touch has no hover, so per-item controls stay visible. */
+  .chat-item__actions,
+  .message__actions {
+    opacity: 1;
+  }
+
+  .status__label {
+    max-width: 40vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .starter:hover {
+    transform: none;
+  }
+}
