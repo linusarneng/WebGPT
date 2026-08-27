@@ -481,6 +481,13 @@ textarea {
   scrollbar-gutter: stable;
 }
 
+/* Before a model exists the start view is a fixed panel, not a scrolling page:
+   it is sized to fit the viewport, so nothing hides below the fold. */
+.conversation:has(.empty[data-runtime='idle']),
+.conversation:has(.empty[data-runtime='loading']) {
+  overflow-y: hidden;
+}
+
 .conversation:focus-visible {
   outline-offset: -2px;
 }
@@ -678,6 +685,13 @@ textarea {
   padding: 12px 0 24px;
 }
 
+.empty[data-runtime='idle'],
+.empty[data-runtime='loading'] {
+  align-content: center;
+  min-height: 100%;
+  padding: 8px 0;
+}
+
 .empty__title {
   margin: 0;
   font-size: 26px;
@@ -692,48 +706,14 @@ textarea {
   font-size: 14.5px;
 }
 
-.empty__prompts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.starter {
-  display: grid;
-  gap: 2px;
-  padding: 11px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--speed), border-color var(--speed), transform var(--speed);
-}
-
-.starter:hover {
-  background: var(--surface-hover);
-  border-color: var(--accent-line);
-  transform: translateY(-1px);
-}
-
-.starter__label {
-  font-size: 13.5px;
-  font-weight: 550;
-}
-
-.starter__hint {
-  color: var(--ink-faint);
-  font-size: 12.5px;
-}
-
 /* ------------------------------------------------------- install plate -- */
 /* The model's identity card. Pre-load it is the hero; once the model is
    resident it retires and the top-bar chip carries the same facts. */
 
 .plate {
   display: grid;
-  gap: 16px;
-  padding: 24px;
+  gap: 13px;
+  padding: 20px 22px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -747,8 +727,8 @@ textarea {
 }
 
 .plate__title {
-  margin: -8px 0 0;
-  font-size: 27px;
+  margin: -6px 0 0;
+  font-size: 23px;
   font-weight: 620;
   line-height: 1.2;
   letter-spacing: -0.024em;
@@ -764,14 +744,14 @@ textarea {
   display: grid;
   grid-template-columns: 8rem minmax(0, 1fr);
   gap: 12px;
-  padding: 9px 0;
+  padding: 6px 0;
   border-bottom: 1px solid var(--line-soft);
 }
 
 .spec__term {
   color: var(--ink-faint);
   font-weight: 500;
-  line-height: 1.9;
+  line-height: 1.7;
 }
 
 .spec__value {
@@ -787,16 +767,22 @@ textarea {
 }
 
 .plate__cta {
-  justify-self: start;
-  padding: 10px 20px;
+  justify-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 0;
+  padding: 12px 22px;
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   background: var(--accent);
-  color: #fff;
-  font-size: 14.5px;
-  font-weight: 560;
+  color: #06231a;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   cursor: pointer;
-  transition: background var(--speed), transform var(--speed);
+  transition: background var(--speed), transform var(--speed), box-shadow var(--speed);
 }
 
 .plate__cta:hover {
@@ -805,6 +791,13 @@ textarea {
 
 .plate__cta:active {
   transform: translateY(1px);
+}
+
+.plate__cta-size {
+  color: rgba(6, 35, 26, 0.66);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 /* The phase rail: four named stages, with nothing invented in between. */
@@ -1060,15 +1053,6 @@ textarea {
   color: var(--accent);
 }
 
-.composer__keys kbd {
-  padding: 1px 4px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--surface);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-}
-
 /* --------------------------------------------------------- narrow view -- */
 
 @media (max-width: 860px) {
@@ -1122,45 +1106,6 @@ textarea {
     padding-bottom: max(14px, env(safe-area-inset-bottom));
   }
 
-  .empty__prompts {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .plate {
-    padding: 20px 18px;
-    border-radius: var(--radius);
-  }
-
-  .plate__title {
-    font-size: 22px;
-  }
-
-  .spec {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 2px;
-  }
-
-  .spec__term {
-    line-height: 1.5;
-  }
-
-  .plate__rail {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px 12px;
-  }
-
-  /* Touch has no hover, so per-item controls stay visible. */
-  .chat-item__actions,
-  .message__actions {
-    opacity: 1;
-  }
-
-  .status__label {
-    max-width: 40vw;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1170,10 +1115,6 @@ textarea {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-  }
-
-  .starter:hover {
-    transform: none;
   }
 }
 
@@ -1288,8 +1229,7 @@ body {
   box-shadow: 0 0 0 3px rgba(124, 219, 178, 0.12), 0 14px 34px rgba(0, 0, 0, 0.34);
 }
 
-.plate,
-.starter {
+.plate {
   background: linear-gradient(145deg, #161a20, #101217);
   border-color: #2a3039;
 }
@@ -1298,27 +1238,29 @@ body {
   box-shadow: 0 24px 64px -38px #000, inset 0 1px rgba(255, 255, 255, 0.04);
 }
 
-/* Each model remains a real radio control, but the label becomes a full card. */
+/* Each model is a card; the radio stays real but invisible. */
 .picker {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .picker__options {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+}
+
+.plate .picker__options {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 }
 
 .model-option {
   position: relative;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 11px;
-  align-items: start;
-  min-height: 92px;
-  padding: 13px 14px;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 5px;
+  padding: 12px 13px 13px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #101318;
   cursor: pointer;
   transition: border-color var(--speed), background var(--speed), transform var(--speed), box-shadow var(--speed);
@@ -1332,28 +1274,47 @@ body {
 
 .model-option[data-selected='true'] {
   border-color: var(--accent-line);
-  background: linear-gradient(135deg, #123128, #111b1a);
-  box-shadow: inset 0 0 0 1px rgba(124, 219, 178, 0.08);
+  background: linear-gradient(150deg, #12312a, #111a1c);
+  box-shadow: 0 0 0 1px rgba(124, 219, 178, 0.22), 0 16px 34px -26px #000;
 }
 
+/* The radio is kept for semantics and keyboard use, but drawn as a dot. */
 .model-option__input {
-  width: 17px;
-  height: 17px;
-  margin: 3px 0 0;
-  accent-color: var(--accent);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.model-option__body {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
+.model-option::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid #444d59;
+  border-radius: 50%;
+  transition: border-color var(--speed), box-shadow var(--speed), background var(--speed);
+}
+
+.model-option[data-selected='true']::after {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px #101318;
+}
+
+.model-option:has(.model-option__input:focus-visible) {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
 }
 
 .model-option__head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: baseline;
+  gap: 8px;
+  padding-right: 22px;
 }
 
 .model-option__name {
@@ -1363,7 +1324,7 @@ body {
   line-height: 1.25;
 }
 
-.model-option__state {
+.model-option__state:not(:empty) {
   flex: none;
   color: var(--accent);
   font-family: var(--font-mono);
@@ -1388,10 +1349,139 @@ body {
   line-height: 1.45;
 }
 
+.model-option__size {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
 .model-option__summary { overflow-wrap: anywhere; }
 .picker__note { margin: 1px 2px 0; }
 .picker__lock { margin: 0; color: var(--danger); }
 .model-option:has(.model-option__input:disabled) { cursor: not-allowed; opacity: .62; }
+
+.technical-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px 11px 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #101218 0%, #0d0f14 100%);
+}
+
+.technical-panel__title { margin: 0; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
+.technical-panel__status { display: inline-flex; align-items: center; justify-self: start; gap: 6px; min-height: 22px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-sunken); color: var(--ink-muted); font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.technical-panel__status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); }
+.technical-panel__status[data-state='ready'], .technical-panel__status[data-state='generating'] { border-color: var(--accent-line); background: var(--accent-wash); color: var(--accent); }
+.technical-panel__status[data-state='ready'] .technical-panel__status-dot, .technical-panel__status[data-state='generating'] .technical-panel__status-dot { background: var(--accent); }
+.technical-panel__status[data-state='loading'] .technical-panel__status-dot, .technical-panel__status[data-state='generating'] .technical-panel__status-dot { animation: pulse 1.4s ease-in-out infinite; }
+.technical-panel__status[data-state='error'] { border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); background: var(--danger-wash); color: var(--danger); }
+.technical-panel__status[data-state='error'] .technical-panel__status-dot { background: var(--danger); }
+
+.technical-panel__model { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.technical-panel__model-name { min-width: 0; overflow: hidden; color: var(--ink); font-size: 12.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.technical-panel__model-backend { flex: none; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .03em; white-space: nowrap; }
+
+.technical-panel__phase { margin: 0; overflow: hidden; color: var(--ink-muted); font-family: var(--font-mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.technical-panel__meter { height: 3px; overflow: hidden; border-radius: 999px; background: var(--surface-sunken); }
+.technical-panel__meter-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width var(--speed); }
+
+.technical-panel__metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.technical-panel__metric { min-width: 0; padding: 6px; border: 1px solid var(--line-soft); border-radius: 6px; background: color-mix(in srgb, var(--canvas) 48%, transparent); }
+.technical-panel__metric-label { display: block; overflow: hidden; color: var(--ink-faint); font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .04em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.technical-panel__metric-value { display: block; margin-top: 2px; overflow: hidden; color: var(--ink); font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.technical-panel__error { margin: 0; overflow: hidden; color: var(--danger); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ----------------------------------------------------------- history -- */
+.history { border-top: 1px solid var(--line-soft); }
+.history__summary { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 8px 4px; color: var(--ink-muted); font-size: 12px; font-weight: 550; letter-spacing: .02em; cursor: pointer; }
+.history__summary::marker { color: var(--ink-faint); }
+.history__summary:hover { color: var(--ink); }
+.history__count { margin-left: auto; color: var(--ink-faint); font-family: var(--font-mono); font-size: 10px; font-variant-numeric: tabular-nums; }
+.history__body { padding-bottom: 6px; }
+
+/* ---------------------------------------------------------- thinking -- */
+.thinking { margin: 0 0 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--canvas) 55%, transparent); }
+.thinking__summary { display: flex; align-items: center; gap: 7px; padding: 6px 10px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; cursor: pointer; }
+.thinking__summary:hover { color: var(--ink-muted); }
+.thinking[data-state='active'] .thinking__summary { color: var(--accent); }
+.thinking__body { padding: 2px 10px 10px; border-top: 1px solid var(--line-soft); color: var(--ink-muted); font-size: 13.5px; }
+.thinking__body > * { margin-block: 6px; }
+.message__answer { min-width: 0; }
+
+/* ------------------------------------------------ premium dark repair -- */
+html,
+body,
+#app {
+  min-height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: radial-gradient(circle at 72% -12%, #18231f 0, transparent 31rem), var(--canvas);
+}
+
+.app {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--canvas);
+}
+
+.main {
+  min-height: 0;
+  overflow: hidden;
+  background: linear-gradient(135deg, #101218 0%, #0d0f14 100%);
+}
+
+.topbar {
+  background: rgba(17, 19, 24, 0.82);
+  border-bottom-color: var(--line);
+}
+
+.sidebar {
+  background: linear-gradient(180deg, #0d0f13, #090a0e);
+}
+
+.conversation {
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+.conversation__inner {
+  padding-bottom: 28px;
+}
+
+.composer-region {
+  position: relative;
+  z-index: 1;
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
+  background: linear-gradient(to top, #0d0f14 74%, rgba(13, 15, 20, 0));
+}
+
+.composer__field {
+  border-color: #343b46;
+  background: #15181e;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34), inset 0 1px rgba(255, 255, 255, 0.035);
+}
+
+.composer:focus-within .composer__field {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px rgba(124, 219, 178, 0.12), 0 14px 34px rgba(0, 0, 0, 0.34);
+}
+
+.plate {
+  background: linear-gradient(145deg, #161a20, #101217);
+  border-color: #2a3039;
+}
+
+.plate {
+  box-shadow: 0 24px 64px -38px #000, inset 0 1px rgba(255, 255, 255, 0.04);
+}
+
 
 .technical-panel {
   border-color: #303741;

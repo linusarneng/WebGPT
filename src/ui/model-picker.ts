@@ -46,18 +46,13 @@ export function createModelPicker(
 
     const row = el('label', { class: 'model-option' }, [
       input,
-      el('span', { class: 'model-option__body' }, [
-        el('span', { class: 'model-option__head' }, [
-          el('span', { class: 'model-option__name' }, [model.name]),
-          badge,
-        ]),
-        el('span', { class: 'model-option__meta' }, [
-          model.tradeoff,
-          ' · ',
-          `~${model.approximateDownloadMb} MB first download`,
-        ]),
-        el('span', { class: 'model-option__summary' }, [model.summary]),
+      el('span', { class: 'model-option__head' }, [
+        el('span', { class: 'model-option__name' }, [model.name]),
+        badge,
       ]),
+      el('span', { class: 'model-option__meta' }, [model.tradeoff]),
+      el('span', { class: 'model-option__summary' }, [model.summary]),
+      el('span', { class: 'model-option__size' }, [`~${model.approximateDownloadMb} MB first download`]),
     ]);
 
     input.addEventListener('change', () => {

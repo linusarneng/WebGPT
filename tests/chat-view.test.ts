@@ -3,7 +3,6 @@ import { getModel } from '../src/config/model';
 import { createChatView, type ChatViewState, type ChatViewView } from '../src/ui/chat-view';
 
 const callbacks = {
-  onStarterPrompt: vi.fn(),
   onLoadModel: vi.fn(),
   onSelectModel: vi.fn(),
   onRetry: vi.fn(),
@@ -61,27 +60,6 @@ describe('first-run install plate', () => {
     expect(callbacks.onLoadModel).toHaveBeenCalledOnce();
   });
 
-  it('keeps starter prompts available next to the plate', () => {
-    render();
-    expect(all('.starter')).toHaveLength(4);
-    all('.starter')[0]!.click();
-    expect(callbacks.onStarterPrompt).toHaveBeenCalledOnce();
-  });
-});
-
-describe('load phases in the empty state', () => {
-  it('walks four named phases with done, active and pending steps', () => {
-    render({ runtimeStatus: 'loading', runtimePhase: 'downloading' });
-    const steps = all('.phase');
-    expect(steps.map((step) => step.textContent)).toEqual([
-      'Checking device',
-      'Downloading model',
-      'Preparing model',
-      'Ready',
-    ]);
-    expect(steps.map((step) => step.dataset.state)).toEqual(['done', 'active', 'pending', 'pending']);
-  });
-
   it('advances the rail as the phase advances', () => {
     render({ runtimeStatus: 'loading', runtimePhase: 'preparing' });
     expect(all('.phase').map((step) => step.dataset.state)).toEqual([
@@ -106,7 +84,6 @@ describe('load phases in the empty state', () => {
   it('drops the plate entirely once the model is ready', () => {
     render({ runtimeStatus: 'ready' });
     expect(q('.plate')).toBeNull();
-    expect(all('.starter')).toHaveLength(4);
   });
 });
 

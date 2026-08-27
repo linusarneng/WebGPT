@@ -26,9 +26,8 @@ async function loadModel(page: Page): Promise<void> {
 }
 
 test.describe('WebGPT shell', () => {
-  test('shows the empty state, starter prompts and a load action', async ({ page }) => {
+  test('shows the empty state and a load action', async ({ page }) => {
     await open(page);
-    await expect(page.locator('.starter')).toHaveCount(4);
     await expect(page.getByRole('button', { name: /^Load .+$/ })).toBeVisible();
     await expect(page.locator('.status')).toHaveAttribute('data-state', 'idle');
     await expect(page.getByLabel('Message WebGPT')).toBeDisabled();

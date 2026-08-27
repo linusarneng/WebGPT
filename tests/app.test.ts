@@ -97,12 +97,11 @@ afterEach(() => {
 });
 
 describe('WebGPT app', () => {
-  it('renders the empty state with starter prompts and a load action', async () => {
+  it('renders the empty state with a load action', async () => {
     await mount();
     expect(q('.plate__title')).not.toBeNull();
     expect(q('.plate__title')!.textContent).toContain(DEFAULT_MODEL.name);
     expect(q('.status__label')!.textContent).toContain(`${DEFAULT_MODEL.name} · not loaded`);
-    expect(all('.starter')).toHaveLength(4);
     expect(loadButton()).toBeDefined();
     expect(ScriptedWorker.latest).toBeUndefined();
   });
@@ -432,24 +431,5 @@ describe('WebGPT app', () => {
 
     expect(all('.message')).toHaveLength(2);
     expect(ScriptedWorker.latest!.commands.filter((c) => c.type === 'generate')).toHaveLength(1);
-  });
-
-  it('fills the composer from a starter prompt when the model is not loaded yet', async () => {
-    await mount();
-    all('.starter')[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await flush();
-    expect(q<HTMLTextAreaElement>('.composer__input')!.value).toContain('sky');
-    expect(ScriptedWorker.latest!.commands[0]).toMatchObject({ type: 'initialize' });
-  });
-
-  it('sends a starter prompt directly once the model is ready', async () => {
-    await mount();
-    loadButton()!.click();
-    ScriptedWorker.latest!.becomeReady();
-    await flush();
-    all('.starter')[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await flush();
-    expect(all('.message')).toHaveLength(2);
-    expect(q('.message--user')!.textContent).toContain('sky');
   });
 });

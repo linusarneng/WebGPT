@@ -37,21 +37,9 @@ export function createComposer(callbacks: ComposerCallbacks): ComposerView {
   }) as HTMLTextAreaElement;
 
   const action = el('button', { class: 'composer__send', type: 'submit' }, [sendIcon(), stopIcon()]);
-  const hintRight = el('span', { class: 'composer__keys' }, [
-    el('kbd', {}, ['Enter']),
-    ' to send · ',
-    el('kbd', {}, ['Shift']),
-    ' + ',
-    el('kbd', {}, ['Enter']),
-    ' for a new line',
-  ]);
-
   const form = el('form', { class: 'composer', 'data-state': 'locked' }, [
     el('div', { class: 'composer__field' }, [input, action]),
-    el('div', { class: 'composer__hint' }, [
-      el('span', { class: 'composer__status' }, []),
-      hintRight,
-    ]),
+    el('div', { class: 'composer__hint' }, [el('span', { class: 'composer__status' }, [])]),
   ]);
 
   function autosize(): void {

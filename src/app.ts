@@ -85,15 +85,6 @@ export async function createApp(options: AppOptions): Promise<App> {
   });
 
   const chatView = createChatView({
-    onStarterPrompt: (prompt) => {
-      if (runtime.status !== 'ready') {
-        composer.setValue(prompt);
-        composer.focus();
-        if (runtime.status === 'idle') loadSelectedModel();
-        return;
-      }
-      void send(prompt);
-    },
     onLoadModel: () => {
       loadSelectedModel();
     },

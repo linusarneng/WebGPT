@@ -9,7 +9,6 @@ import { createModelPicker, type ModelPickerView } from './model-picker';
 import { LOAD_PHASES } from './model-status';
 
 export interface ChatViewCallbacks {
-  onStarterPrompt(prompt: string): void;
   onLoadModel(): void;
   onSelectModel(id: ModelId): void;
   onRetry(messageId: string): void;
@@ -37,29 +36,6 @@ export interface ChatViewView {
   readonly element: HTMLElement;
   render(state: ChatViewState): void;
 }
-
-const STARTERS: { label: string; hint: string; prompt: string }[] = [
-  {
-    label: 'Explain a concept simply',
-    hint: 'Why is the sky blue?',
-    prompt: 'Explain in simple terms why the sky looks blue.',
-  },
-  {
-    label: 'Draft something short',
-    hint: 'A three-line note',
-    prompt: 'Write a short, friendly note telling my team that today’s standup is cancelled.',
-  },
-  {
-    label: 'Write a small snippet',
-    hint: 'A JavaScript helper',
-    prompt: 'Write a JavaScript function that debounces another function, and explain it briefly.',
-  },
-  {
-    label: 'Brainstorm ideas',
-    hint: 'Five weekend projects',
-    prompt: 'Give me five small weekend project ideas for someone learning TypeScript.',
-  },
-];
 
 const COPY_ICON = 'M9 3h9v13h-3v3H6V6h3zm2 2v9h5V5zM8 8v9h5v-1H9V8z';
 const RETRY_ICON = 'M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z';
@@ -159,25 +135,15 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
         plate.append(renderMeter(state.runtimePercent));
       }
     } else {
-      const load = el('button', { class: 'plate__cta', type: 'button' }, [`Load ${model.name}`]);
+      const load = el('button', { class: 'plate__cta', type: 'button' }, [
+        `Load ${model.name}`,
+        el('span', { class: 'plate__cta-size' }, [`~${model.approximateDownloadMb} MB`]),
+      ]);
       load.addEventListener('click', callbacks.onLoadModel);
       plate.append(load);
     }
 
     return plate;
-  }
-
-  function renderStarters(): HTMLElement {
-    const prompts = el('div', { class: 'empty__prompts' });
-    for (const starter of STARTERS) {
-      const button = el('button', { class: 'starter', type: 'button' }, [
-        el('span', { class: 'starter__label' }, [starter.label]),
-        el('span', { class: 'starter__hint' }, [starter.hint]),
-      ]);
-      button.addEventListener('click', () => callbacks.onStarterPrompt(starter.prompt));
-      prompts.append(button);
-    }
-    return prompts;
   }
 
   function renderEmptyState(state: ChatViewState): HTMLElement {
@@ -201,7 +167,6 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
       );
     }
 
-    empty.append(renderStarters());
     return empty;
   }
 
