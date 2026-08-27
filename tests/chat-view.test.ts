@@ -169,3 +169,80 @@ describe('choosing a model from the first-run card', () => {
     expect(plate).toContain('never leave this device');
   });
 });
+
+/** Builds a one-exchange conversation whose assistant reply is under test. */
+function conversationWith(reply: Partial<{ text: string; status: string }>): ChatViewState['conversation'] {
+  return {
+    id: 'c1',
+    title: 'Chat',
+    createdAt: 0,
+    updatedAt: 0,
+    messages: [
+      { id: 'm1', role: 'user', text: 'Why is the sky blue?', status: 'done', createdAt: 0 },
+      { id: 'm2', role: 'assistant', text: '', status: 'done', createdAt: 1, ...reply },
+    ],
+  } as ChatViewState['conversation'];
+}
+
+const renderReply = (reply: Partial<{ text: string; status: string }>): void =>
+  render({ runtimeStatus: 'ready', conversation: conversationWith(reply) });
+
+describe('model-emitted thinking', () => {
+  it('renders no thinking disclosure when the model emitted no tags', () => {
+    renderReply({ text: 'The sky scatters blue light.' });
+    expect(q('.thinking')).toBeNull();
+    expect(q('.message--assistant .message__body')!.textContent).toContain('The sky scatters blue light.');
+  });
+
+  it('separates finished thinking into a collapsed details next to the answer', () => {
+    renderReply({ text: '<think>Rayleigh scattering.</think>Blue light scatters most.' });
+    const details = q('.thinking') as HTMLDetailsElement;
+    expect(details.tagName).toBe('DETAILS');
+    expect(details.open).toBe(false);
+    expect(details.querySelector('summary')!.textContent).toContain('thinking');
+    expect(details.textContent).toContain('Rayleigh scattering.');
+    const answer = q('.message__answer')!;
+    expect(answer.textContent).toContain('Blue light scatters most.');
+    expect(answer.textContent).not.toContain('Rayleigh');
+  });
+
+  it('never renders a raw think tag in either panel', () => {
+    renderReply({ text: '<think>Rayleigh scattering.</think>Blue light scatters most.' });
+    expect(q('.message--assistant')!.innerHTML).not.toContain('&lt;think&gt;');
+    expect(q('.message--assistant')!.textContent).not.toContain('<think>');
+  });
+
+  it('shows an open, explicitly active thinking state while only reasoning has streamed', () => {
+    renderReply({ text: '<think>Working through it', status: 'streaming' });
+    const details = q('.thinking') as HTMLDetailsElement;
+    expect(details.open).toBe(true);
+    expect(details.dataset.state).toBe('active');
+    expect(details.querySelector('summary')!.textContent).toContain('Thinking…');
+    expect(q('.message__answer')).toBeNull();
+  });
+
+  it('hides a partial tag arriving across chunks instead of flashing it', () => {
+    renderReply({ text: 'Blue light scatters most.<thi', status: 'streaming' });
+    expect(q('.message--assistant')!.textContent).not.toContain('<thi');
+    expect(q('.message__answer')!.textContent).toContain('Blue light scatters most.');
+  });
+
+  it('copies the final answer only, never the thinking text', () => {
+    renderReply({ text: '<think>Rayleigh scattering.</think>Blue light scatters most.' });
+    q('.msg-action')!.click();
+    expect(callbacks.onCopy).toHaveBeenCalledWith('Blue light scatters most.');
+  });
+
+  it('keeps the plain pending state when nothing has streamed yet', () => {
+    renderReply({ text: '', status: 'pending' });
+    expect(q('.message__thinking')!.textContent).toContain('Thinking…');
+    expect(q('.thinking')).toBeNull();
+  });
+
+  it('keeps stopped and failed behaviour intact around thinking', () => {
+    renderReply({ text: '<think>Half a thought</think>Partial answer', status: 'stopped' });
+    expect(q('.message__note')!.textContent).toContain('Stopped.');
+    expect(q('.thinking')).not.toBeNull();
+    expect(q('.message__answer')!.textContent).toContain('Partial answer');
+  });
+});

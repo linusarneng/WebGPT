@@ -3,8 +3,14 @@
  * Transformers.js worker with a scripted one so end-to-end tests exercise the whole
  * UI without downloading ~500 MB of model weights.
  */
-export function installMockWorker(options: { backend?: 'webgpu' | 'wasm'; failLoad?: boolean } = {}): string {
-  const config = JSON.stringify({ backend: options.backend ?? 'webgpu', failLoad: options.failLoad ?? false });
+export function installMockWorker(
+  options: { backend?: 'webgpu' | 'wasm'; failLoad?: boolean; thinking?: boolean } = {},
+): string {
+  const config = JSON.stringify({
+    backend: options.backend ?? 'webgpu',
+    failLoad: options.failLoad ?? false,
+    thinking: options.thinking ?? false,
+  });
   return `
     (() => {
       const config = ${config};
@@ -46,7 +52,11 @@ export function installMockWorker(options: { backend?: 'webgpu' | 'wasm'; failLo
             const id = command.requestId;
             this.currentId = id;
             this.stopped = false;
-            const words = ['Sunlight', ' scatters', ' off', ' air', ' molecules,', ' and', ' blue', ' scatters', ' most.'];
+            const answer = ['Sunlight', ' scatters', ' off', ' air', ' molecules,', ' and', ' blue', ' scatters', ' most.'];
+            // Tag halves are emitted separately so the parser meets real chunk splits.
+            const words = config.thinking
+              ? ['<thi', 'nk>', 'Rayleigh scattering', ' favours short wavelengths.', '</thi', 'nk>', ...answer]
+              : answer;
             let index = 0;
             let text = '';
             const tick = () => {

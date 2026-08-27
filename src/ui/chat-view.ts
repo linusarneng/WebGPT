@@ -1,5 +1,6 @@
 import type { ModelConfig, ModelId } from '../config/model';
 import type { Conversation, Message } from '../domain/chat';
+import { splitThinking } from '../domain/thinking';
 import type { LoadPhase, RuntimeStatus } from '../inference/protocol';
 import { clear, el } from './dom';
 import { icon } from './icons';
@@ -227,7 +228,27 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
     return notice;
   }
 
-  function renderActions(message: Message): HTMLElement {
+  /**
+   * Model-emitted reasoning, in its own compact disclosure. Collapsed as soon as
+   * a final answer exists; open and explicitly active while only thinking has
+   * streamed. Nothing here is inferred — it is the model's own tagged text.
+   */
+  function renderThinking(text: string, active: boolean): HTMLDetailsElement {
+    const details = el(
+      'details',
+      { class: 'thinking', 'data-state': active ? 'active' : 'done', ...(active ? { open: '' } : {}) },
+      [
+        el('summary', { class: 'thinking__summary' }, [
+          ...(active ? [el('span', { class: 'message__pulse', 'aria-hidden': 'true' })] : []),
+          el('span', { class: 'thinking__label' }, [active ? 'Thinking…' : 'Show thinking']),
+        ]),
+        el('div', { class: 'thinking__body' }, [renderRichText(text)]),
+      ],
+    ) as HTMLDetailsElement;
+    return details;
+  }
+
+  function renderActions(answer: string): HTMLElement {
     const copy = el(
       'button',
       { class: 'msg-action', type: 'button', 'aria-label': 'Copy this response' },
@@ -235,7 +256,7 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
     );
     const copyLabel = copy.querySelector('.msg-action__label') as HTMLElement;
     copy.addEventListener('click', () => {
-      callbacks.onCopy(message.text);
+      callbacks.onCopy(answer);
       copyLabel.textContent = 'Copied';
       copy.dataset.done = 'true';
       setTimeout(() => {
@@ -256,6 +277,10 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
       el('span', { class: 'message__role' }, [message.role === 'user' ? 'You' : 'WebGPT']),
     );
 
+    const split = message.role === 'assistant'
+      ? splitThinking(message.text)
+      : { thinking: '', answer: message.text, hasThinking: false, thinkingActive: false };
+
     const body = el('div', { class: 'message__body' });
     if (message.role === 'assistant' && message.status === 'pending') {
       body.append(
@@ -265,9 +290,19 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
         ]),
       );
     } else {
-      body.append(renderRichText(message.text));
-      if (message.status === 'streaming') {
-        body.append(el('span', { class: 'message__cursor', 'aria-hidden': 'true' }));
+      if (split.hasThinking) {
+        body.append(renderThinking(split.thinking, split.thinkingActive && message.status === 'streaming'));
+      }
+      if (split.answer || !split.hasThinking) {
+        const answer = el(
+          'div',
+          { class: message.role === 'assistant' ? 'message__answer' : 'message__text' },
+          [renderRichText(split.answer)],
+        );
+        if (message.status === 'streaming') {
+          answer.append(el('span', { class: 'message__cursor', 'aria-hidden': 'true' }));
+        }
+        body.append(answer);
       }
     }
     item.append(body);
@@ -291,8 +326,8 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
       );
     }
 
-    if (message.role === 'assistant' && (message.status === 'done' || message.status === 'stopped') && message.text) {
-      item.append(renderActions(message));
+    if (message.role === 'assistant' && (message.status === 'done' || message.status === 'stopped') && split.answer) {
+      item.append(renderActions(split.answer));
     }
 
     return item;

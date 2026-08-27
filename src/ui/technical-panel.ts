@@ -1,21 +1,12 @@
 import { getModel, type ModelId } from '../config/model';
 import type { Backend, LoadPhase, RuntimeStatus } from '../inference/protocol';
-import {
-  createBrowserMetricsCollector,
-  createSparklineModel,
-  formatBrowserMetric,
-  formatBytes,
-  formatDuration,
-  formatRate,
-  type GenerationStats,
-} from '../telemetry/runtime-telemetry';
+import { formatDuration, type GenerationStats } from '../telemetry/runtime-telemetry';
 import { el } from './dom';
 
 export interface TechnicalState {
   selectedId: ModelId;
   loadedId?: ModelId;
   backend?: Backend;
-  dtype?: string;
   status: RuntimeStatus;
   phase?: LoadPhase;
   progress?: number;
@@ -24,25 +15,12 @@ export interface TechnicalState {
 }
 
 export interface TechnicalPanelView {
-  readonly element: HTMLDetailsElement;
+  readonly element: HTMLElement;
   render(state: TechnicalState): void;
   destroy(): void;
 }
 
-const unavailable = 'Not exposed by this browser';
-const historyLimit = 24;
-
 type VisualState = RuntimeStatus | 'generating';
-
-function row(term: string): [HTMLElement, HTMLElement] {
-  return [el('dt', { class: 'technical-panel__term' }, [term]), el('dd', { class: 'technical-panel__value' })];
-}
-
-function record(history: number[], value: number | undefined): void {
-  if (value === undefined || !Number.isFinite(value)) return;
-  history.push(value);
-  if (history.length > historyLimit) history.splice(0, history.length - historyLimit);
-}
 
 function visualStatus(state: TechnicalState): VisualState {
   if (state.status === 'error') return 'error';
@@ -53,81 +31,71 @@ function statusLabel(status: VisualState): string {
   return status[0]!.toUpperCase() + status.slice(1);
 }
 
-function sparkline(label: string, values: readonly number[] | undefined, emptyText: string, unavailableText: string): HTMLElement {
-  const model = createSparklineModel(values);
-  const text = model.state === 'data'
-    ? `${label}: ${model.valueCount} observed sample${model.valueCount === 1 ? '' : 's'}.`
-    : model.state === 'empty' ? `${label}: ${emptyText}` : `${label}: ${unavailableText}`;
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('class', 'technical-panel__sparkline-path');
-  path.setAttribute('d', model.path);
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', 'technical-panel__sparkline');
-  svg.setAttribute('viewBox', '0 0 100 24');
-  svg.setAttribute('preserveAspectRatio', 'none');
-  svg.setAttribute('aria-hidden', 'true');
-  if (model.state === 'data') svg.append(path);
-  return el('div', { class: 'technical-panel__chart', 'data-state': model.state }, [
-    svg,
-    el('span', { class: 'visually-hidden' }, [text]),
-    el('span', { class: 'technical-panel__chart-caption' }, [model.state === 'data' ? `${model.valueCount} samples` : model.state === 'empty' ? emptyText : unavailableText]),
-  ]);
+function backendLabel(backend: Backend | undefined): string {
+  return backend === 'webgpu' ? 'WebGPU' : backend === 'wasm' ? 'CPU / WASM' : 'Not loaded';
 }
 
-/** Honest local instrumentation. It only shows browser APIs that are actually exposed. */
-export function createTechnicalPanel(): TechnicalPanelView {
-  const collector = createBrowserMetricsCollector();
-  const model = el('dl', { class: 'technical-panel__list' });
-  const status = el('div', { class: 'technical-panel__status' });
-  const generation = el('div', { class: 'technical-panel__metrics', 'aria-label': 'Generation metrics' });
-  const browser = el('dl', { class: 'technical-panel__list' });
-  const memoryVisual = el('div', { class: 'technical-panel__memory', 'aria-label': 'Browser memory history' });
-  const error = el('p', { class: 'technical-panel__error' });
-  const detail = el('details', { class: 'technical-panel__details' }, [
-    el('summary', {}, ['Runtime details']),
-    error,
-  ]) as HTMLDetailsElement;
-  const element = el('details', { class: 'technical-panel' }, [
-    el('summary', { class: 'technical-panel__summary' }, ['Technical']),
-    el('div', { class: 'technical-panel__content' }, [
-      el('h3', {}, ['Model / runtime']), status, model,
-      el('h3', {}, ['Generation']), generation,
-      el('h3', {}, ['Browser / device']), memoryVisual, browser,
-      detail,
+/** One metric tile. The value is only ever a measured number, or an em dash. */
+function metric(label: string): [HTMLElement, HTMLElement] {
+  const value = el('strong', { class: 'technical-panel__metric-value' }, ['—']);
+  return [
+    el('div', { class: 'technical-panel__metric' }, [
+      el('span', { class: 'technical-panel__metric-label' }, [label]),
+      value,
     ]),
-  ]) as HTMLDetailsElement;
+    value,
+  ];
+}
 
-  const rateHistory: number[] = [];
-  const heapHistory: number[] = [];
+/**
+ * A permanent, compact runtime readout: always visible in the sidebar, never a
+ * dropdown, never its own scroller. It states only what the runtime actually
+ * reported — no invented performance, memory or GPU figures.
+ */
+export function createTechnicalPanel(): TechnicalPanelView {
+  const status = el('div', { class: 'technical-panel__status' });
+  const modelName = el('strong', { class: 'technical-panel__model-name' });
+  const backend = el('span', { class: 'technical-panel__model-backend' });
+  const phase = el('p', { class: 'technical-panel__phase' });
+  const meterFill = el('span', { class: 'technical-panel__meter-fill' });
+  const meter = el('div', { class: 'technical-panel__meter' }, [meterFill]);
+  const [tokensTile, tokensValue] = metric('Tokens');
+  const [elapsedTile, elapsedValue] = metric('Elapsed');
+  const [rateTile, rateValue] = metric('Tok/s');
+  const error = el('p', { class: 'technical-panel__error', role: 'alert' });
+
+  const element = el('section', { class: 'technical-panel', 'aria-label': 'Runtime status' }, [
+    el('h2', { class: 'technical-panel__title' }, ['Runtime']),
+    status,
+    el('div', { class: 'technical-panel__model' }, [modelName, backend]),
+    phase,
+    meter,
+    el('div', { class: 'technical-panel__metrics' }, [tokensTile, elapsedTile, rateTile]),
+    error,
+  ]);
+
   let lastState: TechnicalState | undefined;
   let timer: ReturnType<typeof globalThis.setInterval> | undefined;
-  const sample = (): void => {
-    if (lastState) render(lastState);
-  };
-  const updateSampling = (): void => {
-    const active = element.open || lastState?.generation.generating;
-    if (active && timer === undefined) timer = globalThis.setInterval(sample, 1_000);
+
+  /** While generating, elapsed time moves without new tokens arriving. */
+  function updateSampling(): void {
+    const active = lastState?.generation.generating ?? false;
+    if (active && timer === undefined) {
+      timer = globalThis.setInterval(() => {
+        if (lastState) render(lastState);
+      }, 500);
+    }
     if (!active && timer !== undefined) {
       globalThis.clearInterval(timer);
       timer = undefined;
     }
-  };
-  const onToggle = (): void => {
-    updateSampling();
-    if (element.open) sample();
-  };
-  element.addEventListener('toggle', onToggle);
+  }
 
   function render(state: TechnicalState): void {
     lastState = state;
+    const runtimeStatus = visualStatus(state);
     const selected = getModel(state.selectedId);
     const loaded = state.loadedId ? getModel(state.loadedId) : undefined;
-    const metrics = collector.collect();
-    if (state.generation.generating) record(rateHistory, state.generation.tokensPerSecond);
-    if (element.open) record(heapHistory, metrics.heapUsed);
-    const selectedDtype = state.backend === 'wasm' ? selected.wasmDtype : selected.webgpuDtype;
-    const loadedDtype = loaded && state.backend ? (state.backend === 'wasm' ? loaded.wasmDtype : loaded.webgpuDtype) : undefined;
-    const runtimeStatus = visualStatus(state);
 
     status.replaceChildren(
       el('span', { class: 'technical-panel__status-dot', 'aria-hidden': 'true' }),
@@ -136,55 +104,35 @@ export function createTechnicalPanel(): TechnicalPanelView {
     status.dataset.state = runtimeStatus;
     status.setAttribute('aria-label', `Runtime status: ${statusLabel(runtimeStatus)}`);
 
-    const modelRows = [
-      row('Selected model'), row('Repository ID'), row('Loaded model'), row('Backend'), row('Selected dtype'),
-      row('Active dtype'), row('Load phase'), row('Download progress'), row('Runtime state'),
-    ];
-    const values = [
-      selected.name, selected.modelId, loaded?.name ?? 'Not loaded',
-      state.backend === 'webgpu' ? 'WebGPU' : state.backend === 'wasm' ? 'CPU / WASM' : 'Not loaded',
-      selectedDtype, loadedDtype ?? 'Not known until loaded', state.phase ?? (state.status === 'ready' ? 'ready' : 'idle'),
-      state.progress === undefined ? 'No download in progress' : `${Math.round(state.progress)}%`, statusLabel(runtimeStatus),
-    ];
-    for (let index = 0; index < modelRows.length; index += 1) modelRows[index]![1].textContent = values[index]!;
-    model.replaceChildren(...modelRows.flat());
+    modelName.textContent = (loaded ?? selected).name;
+    backend.textContent = backendLabel(state.backend);
 
-    generation.replaceChildren(
-      el('div', { class: 'technical-panel__metric' }, [
-        el('span', { class: 'technical-panel__metric-label' }, ['Output tokens']),
-        el('strong', { class: 'technical-panel__metric-value' }, [state.generation.tokenCount ? String(state.generation.tokenCount) : '—']),
-      ]),
-      el('div', { class: 'technical-panel__metric' }, [
-        el('span', { class: 'technical-panel__metric-label' }, ['Elapsed']),
-        el('strong', { class: 'technical-panel__metric-value' }, [state.generation.tokenCount ? formatDuration(state.generation.elapsedMs) : '—']),
-      ]),
-      el('div', { class: 'technical-panel__metric technical-panel__metric--rate' }, [
-        el('span', { class: 'technical-panel__metric-label' }, ['Output rate']),
-        el('strong', { class: 'technical-panel__metric-value' }, [formatRate(state.generation.tokensPerSecond)]),
-        sparkline('Output-rate history', rateHistory, 'Waiting for real generation samples', unavailable),
-      ]),
-    );
+    const loading = state.status === 'loading';
+    phase.textContent = loading ? `Phase: ${state.phase ?? 'checking'}` : '';
+    phase.hidden = !loading;
+    const percent = loading && state.progress !== undefined ? Math.max(0, Math.min(100, state.progress)) : undefined;
+    if (percent === undefined) {
+      meter.hidden = true;
+      meter.removeAttribute('role');
+    } else {
+      meter.hidden = false;
+      meterFill.setAttribute('style', `width:${percent}%`);
+      meter.setAttribute('role', 'progressbar');
+      meter.setAttribute('aria-label', 'Model download progress');
+      meter.setAttribute('aria-valuemin', '0');
+      meter.setAttribute('aria-valuemax', '100');
+      meter.setAttribute('aria-valuenow', String(Math.round(percent)));
+      phase.textContent = `Phase: ${state.phase ?? 'downloading'} · ${Math.round(percent)}%`;
+    }
 
-    memoryVisual.replaceChildren(
-      el('div', { class: 'technical-panel__memory-head' }, [
-        el('span', { class: 'technical-panel__memory-label' }, ['Browser memory']),
-        el('strong', { class: 'technical-panel__memory-value' }, [formatBytes(metrics.heapUsed)]),
-      ]),
-      sparkline('Browser memory history', metrics.heapUsed === undefined ? undefined : heapHistory, 'Collecting first heap observation', unavailable),
-    );
+    const counted = state.generation.tokenCount > 0;
+    tokensValue.textContent = counted ? String(state.generation.tokenCount) : '—';
+    elapsedValue.textContent = counted ? formatDuration(state.generation.elapsedMs) : '—';
+    const rate = state.generation.tokensPerSecond;
+    rateValue.textContent = rate === undefined ? '—' : rate.toFixed(1);
 
-    const browserRows = [row('Secure context'), row('WebGPU exposure'), row('JS heap used'), row('JS heap limit'), row('Device memory'), row('Logical CPU cores'), row('GPU adapter'), row('GPU memory')];
-    const browserValues = [
-      metrics.secureContext ? 'Secure context' : 'Not a secure context', metrics.webgpu, formatBytes(metrics.heapUsed),
-      formatBytes(metrics.heapLimit), metrics.deviceMemory === undefined ? unavailable : `${metrics.deviceMemory} GiB`,
-      formatBrowserMetric(metrics.cpuCores), metrics.gpuAdapter,
-      'GPU memory is not exposed to normal WebGPU pages.',
-    ];
-    for (let index = 0; index < browserRows.length; index += 1) browserRows[index]![1].textContent = browserValues[index]!;
-    browser.replaceChildren(...browserRows.flat());
-
-    error.textContent = state.error ?? 'No runtime error.';
-    detail.hidden = !state.error;
+    error.textContent = state.error ?? '';
+    error.hidden = !state.error;
     updateSampling();
   }
 
@@ -193,7 +141,7 @@ export function createTechnicalPanel(): TechnicalPanelView {
     render,
     destroy(): void {
       if (timer !== undefined) globalThis.clearInterval(timer);
-      element.removeEventListener('toggle', onToggle);
+      timer = undefined;
     },
   };
 }

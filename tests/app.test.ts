@@ -163,22 +163,31 @@ describe('WebGPT app', () => {
     expect(q('.status__bar')).not.toBeNull();
   });
 
-  it('shows selected and loaded runtime facts in the accessible Technical sidebar disclosure', async () => {
+  it('keeps runtime facts in a permanent, always-visible sidebar panel', async () => {
     await mount();
-    const technical = q<HTMLDetailsElement>('.technical-panel')!;
+    const technical = q('.technical-panel')!;
     expect(technical).not.toBeNull();
-    expect(technical.open).toBe(false);
-    expect(technical.textContent).toContain('Selected model');
-    expect(technical.textContent).toContain(DEFAULT_MODEL.modelId);
+    expect(technical.tagName).toBe('SECTION');
+    expect(technical.querySelector('summary')).toBeNull();
+    expect(technical.textContent).toContain(DEFAULT_MODEL.name);
     expect(technical.textContent).toContain('Not loaded');
-    expect(technical.textContent).toContain('GPU memory is not exposed to normal WebGPU pages.');
     expect(all('.technical-panel__metric')).toHaveLength(3);
 
     loadButton()!.click();
     ScriptedWorker.latest!.becomeReady();
     await flush();
     expect(technical.textContent).toContain('WebGPU');
-    expect(technical.textContent).toContain('Loaded model');
+    expect(q<HTMLElement>('.technical-panel__status')!.dataset.state).toBe('ready');
+  });
+
+  it('moves conversation history into a collapsed disclosure below the runtime panel', async () => {
+    await mount();
+    const history = q<HTMLDetailsElement>('.history')!;
+    expect(history.tagName).toBe('DETAILS');
+    expect(history.open).toBe(false);
+    expect(history.textContent).toContain('History');
+    expect(history.querySelector('.chat-list')).not.toBeNull();
+    expect(q('.new-chat')!.closest('.history')).toBeNull();
   });
 
   it('streams a reply into the conversation and renders it safely', async () => {

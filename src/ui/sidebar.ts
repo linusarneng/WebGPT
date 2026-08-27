@@ -36,6 +36,7 @@ export function createSidebar(callbacks: SidebarCallbacks): SidebarView {
   let activeId: string | undefined;
 
   const list = el('ul', { class: 'chat-list' });
+  const historyCount = el('span', { class: 'history__count' });
   const technical: TechnicalPanelView = createTechnicalPanel();
 
   const newChatButton = el('button', { class: 'new-chat', type: 'button' }, [
@@ -55,10 +56,15 @@ export function createSidebar(callbacks: SidebarCallbacks): SidebarView {
       ]),
     ]),
     el('div', { class: 'sidebar__new' }, [newChatButton]),
+    el('div', { class: 'sidebar__tech' }, [technical.element]),
     el('div', { class: 'sidebar__body' }, [
-      el('h2', { class: 'sidebar__label' }, ['Chats']),
-      list,
-      technical.element,
+      el('details', { class: 'history' }, [
+        el('summary', { class: 'history__summary' }, [
+          el('span', { class: 'history__label' }, ['History']),
+          historyCount,
+        ]),
+        el('div', { class: 'history__body' }, [list]),
+      ]),
     ]),
     el('div', { class: 'sidebar__foot' }, ['Conversations stay in this browser.']),
   ]);
@@ -143,6 +149,7 @@ export function createSidebar(callbacks: SidebarCallbacks): SidebarView {
     conversations = next;
     activeId = nextActiveId;
     clear(list);
+    historyCount.textContent = next.length === 0 ? '' : String(next.length);
     if (next.length === 0) {
       list.append(el('li', { class: 'chat-list__empty' }, ['No conversations yet.']));
       return;

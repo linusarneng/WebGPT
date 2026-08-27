@@ -10,6 +10,16 @@ async function open(page: Page, options: Parameters<typeof installMockWorker>[0]
   await expect(page.getByRole('heading', { name: /Run .+ in this browser/i })).toBeVisible();
 }
 
+/** History now lives in a collapsed disclosure, behind the drawer on mobile. */
+async function openHistory(page: Page, isMobile: boolean | undefined): Promise<void> {
+  if (isMobile && (await page.getByRole('button', { name: 'Open conversation history' }).getAttribute('aria-expanded')) === 'false') {
+    await page.getByRole('button', { name: 'Open conversation history' }).click();
+  }
+  const history = page.locator('.history');
+  if ((await history.getAttribute('open')) === null) await history.locator('summary').click();
+  await expect(history).toHaveAttribute('open', '');
+}
+
 async function loadModel(page: Page): Promise<void> {
   await page.getByRole('button', { name: /^Load .+$/ }).click();
   await expect(page.locator('.status')).toHaveAttribute('data-state', 'ready');
@@ -110,22 +120,44 @@ test.describe('WebGPT shell', () => {
     await expect(page.locator('.notice--warn')).toContainText('WebGPU is unavailable');
   });
 
-  test('renders an honest visual Technical panel without horizontal overflow', async ({ page, isMobile }) => {
+  test('keeps a permanent technical panel visible without a dropdown or nested scroll', async ({ page, isMobile }) => {
     await open(page);
     if (isMobile) await page.getByRole('button', { name: 'Open conversation history' }).click();
 
-    await page.locator('.technical-panel__summary').click();
     const panel = page.locator('.technical-panel');
-    await expect(panel).toHaveAttribute('open', '');
+    await expect(panel).toBeVisible();
+    await expect(panel.locator('summary')).toHaveCount(0);
     await expect(panel.locator('.technical-panel__status')).toHaveAttribute('data-state', 'idle');
-    await expect(panel.locator('.technical-panel__chart')).toHaveCount(2);
-    await expect(panel).toContainText('Waiting for real generation samples');
+    await expect(panel.locator('.technical-panel__metric')).toHaveCount(3);
 
-    const overflow = await panel.evaluate((node) => node.scrollWidth - node.clientWidth);
-    expect(overflow).toBeLessThanOrEqual(0);
+    const overflow = await panel.evaluate((node) => ({
+      x: node.scrollWidth - node.clientWidth,
+      y: node.scrollHeight - node.clientHeight,
+    }));
+    expect(overflow.x).toBeLessThanOrEqual(0);
+    expect(overflow.y).toBeLessThanOrEqual(0);
+
+    if (isMobile) await page.keyboard.press('Escape');
+    await loadModel(page);
+    if (isMobile) await page.getByRole('button', { name: 'Open conversation history' }).click();
+    await expect(panel.locator('.technical-panel__status')).toHaveAttribute('data-state', 'ready');
+    await expect(panel).toContainText('WebGPU');
   });
 
-  test('conversations persist across a page reload', async ({ page }) => {
+  test('keeps conversation history collapsed below the technical panel', async ({ page, isMobile }) => {
+    await open(page);
+    if (isMobile) await page.getByRole('button', { name: 'Open conversation history' }).click();
+
+    const history = page.locator('.history');
+    await expect(history).not.toHaveAttribute('open', '');
+    await expect(page.locator('.chat-item__select')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'New chat' })).toBeVisible();
+
+    await history.locator('summary').click();
+    await expect(history).toHaveAttribute('open', '');
+  });
+
+  test('conversations persist across a page reload', async ({ page, isMobile }) => {
     await open(page);
     await loadModel(page);
     await page.getByLabel('Message WebGPT').fill('Remember this conversation');
@@ -135,19 +167,19 @@ test.describe('WebGPT shell', () => {
     await page.reload();
     await expect(page.locator('.message--user')).toContainText('Remember this conversation');
     await expect(page.locator('.message--assistant')).toContainText('Sunlight scatters');
+    await openHistory(page, isMobile);
     await expect(page.locator('.chat-item__title').first()).toContainText('Remember this conversation');
   });
 
   test('new chat, rename and delete work from the sidebar', async ({ page, isMobile }) => {
     await open(page);
     await loadModel(page);
-    if (isMobile) await page.getByRole('button', { name: 'Open conversation history' }).click();
 
     await page.getByLabel('Message WebGPT').fill('Topic number one');
     await page.getByRole('button', { name: 'Send message' }).click();
     await expect(page.locator('.message--assistant')).toHaveAttribute('data-status', 'done');
 
-    if (isMobile) await page.getByRole('button', { name: 'Open conversation history' }).click();
+    await openHistory(page, isMobile);
     await expect(page.locator('.chat-item__title').first()).toHaveText('Topic number one');
 
     await page.getByRole('button', { name: /Rename “Topic number one”/ }).click();
@@ -160,6 +192,27 @@ test.describe('WebGPT shell', () => {
     await page.getByRole('button', { name: /Delete “My renamed chat”/ }).click();
     await expect(page.locator('.chat-item')).toHaveCount(1);
     await expect(page.locator('.message')).toHaveCount(0);
+  });
+
+  test('separates model-emitted thinking from the final answer', async ({ page }) => {
+    await open(page, { thinking: true });
+    await loadModel(page);
+    await page.getByLabel('Message WebGPT').fill('Why is the sky blue?');
+    await page.getByRole('button', { name: 'Send message' }).click();
+
+    const thinking = page.locator('.thinking');
+    await expect(thinking).toBeVisible();
+    await expect(thinking).toHaveAttribute('data-state', 'active');
+
+    await expect(page.locator('.message--assistant')).toHaveAttribute('data-status', 'done');
+    await expect(thinking).toHaveAttribute('data-state', 'done');
+    await expect(thinking).not.toHaveAttribute('open', '');
+    await expect(page.locator('.message__answer')).toContainText('Sunlight scatters');
+    await expect(page.locator('.message--assistant')).not.toContainText('<think');
+    await expect(page.locator('.message__answer')).not.toContainText('Rayleigh');
+
+    await thinking.locator('summary').click();
+    await expect(thinking).toContainText('Rayleigh scattering');
   });
 
   test('does not contact any application backend', async ({ page }) => {
