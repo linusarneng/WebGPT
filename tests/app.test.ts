@@ -125,7 +125,7 @@ describe('WebGPT app', () => {
 
     loadButton()!.click();
     expect(ScriptedWorker.latest).not.toBe(firstWorker);
-    expect(ScriptedWorker.latest!.lastInitialize().model).toBe(OTHER_MODEL.id);
+    expect(ScriptedWorker.latest!.lastInitialize().model.id).toBe(OTHER_MODEL.id);
     ScriptedWorker.latest!.becomeReady(OTHER_MODEL.id);
     await flush();
     expect(q('.model-menu__toggle')!.textContent).toContain(OTHER_MODEL.name);
@@ -431,5 +431,116 @@ describe('WebGPT app', () => {
 
     expect(all('.message')).toHaveLength(2);
     expect(ScriptedWorker.latest!.commands.filter((c) => c.type === 'generate')).toHaveLength(1);
+  });
+});
+
+describe('WebGPT app custom models', () => {
+  const FILES = ['config.json', 'tokenizer_config.json', 'onnx/model_q4f16.onnx'];
+
+  /** A Hugging Face double: one compatible repo, everything else absent. */
+  const hfFetch = async (url: string, init?: { method?: string }) => {
+    if (url.includes('/api/models/good/repo')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ siblings: FILES.map((rfilename) => ({ rfilename })) }),
+      } as Response;
+    }
+    if (url.includes('/api/models/')) return { ok: false, status: 404 } as Response;
+    if (url.endsWith('tokenizer_config.json')) {
+      return { ok: true, status: 200, json: async () => ({ chat_template: '{{ x }}' }) } as Response;
+    }
+    expect(init?.method).toBe('HEAD');
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-length': String(420 * 1024 * 1024) }),
+    } as Response;
+  };
+
+  async function mountWithHf(): Promise<void> {
+    root = document.createElement('div');
+    document.body.append(root);
+    app = await createApp({
+      root,
+      repository: repo,
+      workerFactory: () => new ScriptedWorker() as unknown as Worker,
+      hfFetch: hfFetch as never,
+    });
+    await flush();
+  }
+
+  function check(value: string): void {
+    const input = q<HTMLInputElement>('.plate .model-add__input')!;
+    input.value = value;
+    q('.plate .model-add')!.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+  }
+
+  it('offers an add-a-model form on the first-run card', async () => {
+    await mountWithHf();
+    expect(q('.plate .model-add')).not.toBeNull();
+    expect(q('.plate .model-add__hint')!.textContent).toMatch(/ONNX/i);
+  });
+
+  it('checks a repository and only adds it once the user confirms', async () => {
+    await mountWithHf();
+    check('https://huggingface.co/good/repo');
+    await flush();
+
+    const found = q('.model-add__found')!;
+    expect(found.textContent).toContain('good/repo');
+    // The real size is shown before anything is downloaded.
+    expect(found.textContent).toContain('420 MB');
+    expect(modelOption('custom:good/repo')).toBeNull();
+
+    byText('.model-add__confirm', 'Add repo')!.click();
+    await flush();
+    expect(modelOption('custom:good/repo')).not.toBeNull();
+    expect(modelOption('custom:good/repo').checked).toBe(true);
+    expect(localStorage.getItem('webgpt.customModels')).toContain('good/repo');
+  });
+
+  it('explains why an incompatible repository was rejected, and adds nothing', async () => {
+    await mountWithHf();
+    check('missing/repo');
+    await flush();
+    expect(q('.model-add__error')!.textContent).toMatch(/not found|private/i);
+    expect(all('.plate .model-option')).toHaveLength(MODEL_CATALOG.length);
+  });
+
+  it('rejects input that is not a repository without asking Hugging Face', async () => {
+    await mountWithHf();
+    check('not a repo');
+    await flush();
+    expect(q('.model-add__error')!.textContent).toMatch(/owner\/name/i);
+  });
+
+  it('remembers a custom model across a remount and can load it', async () => {
+    await mountWithHf();
+    check('good/repo');
+    await flush();
+    byText('.model-add__confirm', 'Add repo')!.click();
+    await flush();
+
+    app.destroy();
+    root.remove();
+    await mountWithHf();
+
+    expect(modelOption('custom:good/repo').checked).toBe(true);
+    loadButton()!.click();
+    expect(ScriptedWorker.latest!.lastInitialize().model.modelId).toBe('good/repo');
+  });
+
+  it('removes a custom model and falls back to a built-in', async () => {
+    await mountWithHf();
+    check('good/repo');
+    await flush();
+    byText('.model-add__confirm', 'Add repo')!.click();
+    await flush();
+
+    q<HTMLButtonElement>('.plate .model-option[data-custom] .model-option__remove')!.click();
+    await flush();
+    expect(modelOption('custom:good/repo')).toBeNull();
+    expect(modelOption(MODEL_CATALOG[0]!.id).checked).toBe(true);
   });
 });

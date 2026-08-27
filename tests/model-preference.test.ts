@@ -58,3 +58,20 @@ describe('model preference', () => {
     expect(preference.get()).toBe('qwen3-0.6b');
   });
 });
+
+describe('model preference with a custom registry', () => {
+  it('remembers a custom model id the built-in catalog does not know', () => {
+    const storage = fakeStorage();
+    storage.setItem(MODEL_PREFERENCE_KEY, 'custom:owner/name');
+    const isKnown = (id: string) => id === 'custom:owner/name';
+    expect(createModelPreference(storage, isKnown).get()).toBe('custom:owner/name');
+    // Without the registry the same stored id is discarded as unknown.
+    expect(createModelPreference(storage).get()).toBe(DEFAULT_MODEL_ID);
+  });
+
+  it('discards a custom model the user has since removed', () => {
+    const storage = fakeStorage();
+    storage.setItem(MODEL_PREFERENCE_KEY, 'custom:gone/away');
+    expect(createModelPreference(storage, () => false).get()).toBe(DEFAULT_MODEL_ID);
+  });
+});

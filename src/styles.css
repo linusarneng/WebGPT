@@ -481,13 +481,6 @@ textarea {
   scrollbar-gutter: stable;
 }
 
-/* Before a model exists the start view is a fixed panel, not a scrolling page:
-   it is sized to fit the viewport, so nothing hides below the fold. */
-.conversation:has(.empty[data-runtime='idle']),
-.conversation:has(.empty[data-runtime='loading']) {
-  overflow-y: hidden;
-}
-
 .conversation:focus-visible {
   outline-offset: -2px;
 }
@@ -586,15 +579,34 @@ textarea {
 
 .message__actions {
   display: flex;
+  align-items: center;
   gap: 4px;
   margin-top: 2px;
+}
+
+/* The button is on-demand; the measured cost of the reply always stays readable. */
+.message__actions .msg-action {
   opacity: 0;
   transition: opacity var(--speed);
 }
 
-.message:hover .message__actions,
-.message:focus-within .message__actions {
+.message:hover .message__actions .msg-action,
+.message:focus-within .message__actions .msg-action {
   opacity: 1;
+}
+
+.message__stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.message__stats-dot {
+  color: var(--line);
 }
 
 .msg-action {
@@ -685,9 +697,11 @@ textarea {
   padding: 12px 0 24px;
 }
 
+/* The start view is centred while it fits the window and scrolls once it does
+   not. `safe` keeps the top edge reachable instead of centring it out of view. */
 .empty[data-runtime='idle'],
 .empty[data-runtime='loading'] {
-  align-content: center;
+  align-content: safe center;
   min-height: 100%;
   padding: 8px 0;
 }
@@ -1362,6 +1376,143 @@ body {
 .picker__note { margin: 1px 2px 0; }
 .picker__lock { margin: 0; color: var(--danger); }
 .model-option:has(.model-option__input:disabled) { cursor: not-allowed; opacity: .62; }
+
+/* ------------------------------------------------- add a custom model -- */
+
+.model-option[data-custom] .model-option__remove {
+  justify-self: start;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: border-color var(--speed), color var(--speed);
+}
+
+.model-option[data-custom] .model-option__remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.model-add {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.model-add__title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.model-add__row {
+  display: flex;
+  gap: 8px;
+}
+
+.model-add__input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.model-add__input:focus-visible {
+  border-color: var(--accent-line);
+}
+
+.model-add__submit,
+.model-add__confirm,
+.model-add__dismiss {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background var(--speed), border-color var(--speed), color var(--speed);
+}
+
+.model-add__submit:hover:not(:disabled),
+.model-add__dismiss:hover {
+  border-color: #46515e;
+  background: var(--surface-sunken);
+}
+
+.model-add__confirm {
+  border-color: transparent;
+  background: var(--accent);
+  color: #06231a;
+  font-weight: 600;
+}
+
+.model-add__confirm:hover {
+  background: var(--accent-hover);
+}
+
+.model-add__submit:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.model-add__hint {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.model-add__found {
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  background: var(--accent-wash);
+}
+
+.model-add__found-name {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.model-add__found-facts {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.model-add__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.model-add__error {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, var(--line));
+  border-radius: var(--radius-sm);
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
 
 .technical-panel {
   display: grid;

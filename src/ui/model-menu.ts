@@ -1,5 +1,6 @@
-import { getModel, type ModelId } from '../config/model';
+import { getDefaultModel, type ModelConfig, type ModelId } from '../config/model';
 import { el } from './dom';
+import type { ModelAddState } from './model-add';
 import { createModelPicker } from './model-picker';
 import { createModelStatus, type ModelStatusState } from './model-status';
 
@@ -7,9 +8,15 @@ export interface ModelMenuCallbacks {
   onSelect(id: ModelId): void;
   /** The explicit, deliberate act of fetching and loading the selection. */
   onLoad(): void;
+  onCheckModel?(input: string): void;
+  onConfirmModel?(): void;
+  onDismissModel?(): void;
+  onRemoveModel?(id: ModelId): void;
 }
 
 export interface ModelMenuState extends ModelStatusState {
+  models: readonly ModelConfig[];
+  add?: ModelAddState;
   selectedId: ModelId;
   loadedId?: ModelId;
   locked: boolean;
@@ -42,7 +49,17 @@ export function createModelMenu(callbacks: ModelMenuCallbacks): ModelMenuView {
   const status = createModelStatus(toggle);
 
   const picker = createModelPicker(
-    { onSelect: (id) => callbacks.onSelect(id) },
+    {
+      onSelect: (id) => callbacks.onSelect(id),
+      ...(callbacks.onCheckModel
+        ? {
+            onCheckModel: (input: string) => callbacks.onCheckModel?.(input),
+            onConfirmModel: () => callbacks.onConfirmModel?.(),
+            onDismissModel: () => callbacks.onDismissModel?.(),
+            onRemoveModel: (id: ModelId) => callbacks.onRemoveModel?.(id),
+          }
+        : {}),
+    },
     { name: 'model-menu-choice' },
   );
 
@@ -88,13 +105,15 @@ export function createModelMenu(callbacks: ModelMenuCallbacks): ModelMenuView {
     render(state) {
       status.render(state);
       picker.render({
+        models: state.models,
+        add: state.add,
         selectedId: state.selectedId,
         loadedId: state.loadedId,
         locked: state.locked,
         lockReason: state.lockReason,
       });
 
-      const selected = getModel(state.selectedId);
+      const selected = state.models.find((model) => model.id === state.selectedId) ?? getDefaultModel();
       const isResident = state.selectedId === state.loadedId && state.status === 'ready';
 
       if (isResident) {

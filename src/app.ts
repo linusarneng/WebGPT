@@ -1,13 +1,17 @@
-import { getModel, type ModelId } from './config/model';
+import type { ModelId } from './config/model';
+import { parseRepoId, probeRepo, type HfFetch } from './inference/hf-repo';
 import { InferenceClient, type WorkerFactory } from './inference/inference-client';
 import type { WorkerEvent } from './inference/protocol';
 import { ChatStore } from './state/chat-store';
+import { createModelRegistry } from './state/model-registry';
 import { createChatRepository, MemoryChatRepository, type ChatRepository } from './storage/chat-repository';
+import { createCustomModelStore, type CustomModelStore } from './storage/custom-models';
 import { createModelPreference, type ModelPreference } from './storage/model-preference';
 import { createGenerationTelemetry } from './telemetry/runtime-telemetry';
 import { createAppShell } from './ui/app-shell';
 import { createChatView } from './ui/chat-view';
 import { createComposer } from './ui/composer';
+import type { ModelAddState } from './ui/model-add';
 import { createModelMenu } from './ui/model-menu';
 import type { ModelStatusState } from './ui/model-status';
 import { createSidebar } from './ui/sidebar';
@@ -18,6 +22,9 @@ export interface AppOptions {
   repository?: ChatRepository;
   workerFactory?: WorkerFactory;
   modelPreference?: ModelPreference;
+  customModels?: CustomModelStore;
+  /** Injected so the Hugging Face compatibility check can be tested offline. */
+  hfFetch?: HfFetch;
 }
 
 export interface App {
@@ -53,11 +60,16 @@ export async function createApp(options: AppOptions): Promise<App> {
   const repository = options.repository ?? (await createChatRepository());
   const store = new ChatStore(repository);
   const client = new InferenceClient(options.workerFactory);
-  const modelPreference = options.modelPreference ?? createModelPreference();
+  const registry = createModelRegistry(options.customModels ?? createCustomModelStore());
+  const modelPreference =
+    options.modelPreference ?? createModelPreference(undefined, (id) => registry.has(id));
   const progress = new DownloadProgress();
   const generation = createGenerationTelemetry();
 
-  let selectedId: ModelId = modelPreference.get();
+  let selectedId: ModelId = registry.has(modelPreference.get())
+    ? modelPreference.get()
+    : registry.list()[0]!.id;
+  let addState: ModelAddState = { status: 'idle', locked: false };
   let loadedId: ModelId | undefined;
   let runtime: Omit<ModelStatusState, 'model'> = { status: 'idle' };
   let runtimeWarning: string | undefined;
@@ -67,6 +79,10 @@ export async function createApp(options: AppOptions): Promise<App> {
   const status = createModelMenu({
     onSelect: (id) => selectModel(id),
     onLoad: () => loadSelectedModel(),
+    onCheckModel: (input) => void checkModel(input),
+    onConfirmModel: () => confirmModel(),
+    onDismissModel: () => dismissModel(),
+    onRemoveModel: (id) => removeModel(id),
   });
 
   const sidebar = createSidebar({
@@ -89,6 +105,10 @@ export async function createApp(options: AppOptions): Promise<App> {
       loadSelectedModel();
     },
     onSelectModel: (id) => selectModel(id),
+    onCheckModel: (input) => void checkModel(input),
+    onConfirmModel: () => confirmModel(),
+    onDismissModel: () => dismissModel(),
+    onRemoveModel: (id) => removeModel(id),
     onRetry: (messageId) => {
       const chatId = store.getState().activeId;
       if (!chatId) return;
@@ -130,6 +150,7 @@ export async function createApp(options: AppOptions): Promise<App> {
     const conversation = store.getActiveConversation();
     sidebar.render(state.conversations, state.activeId);
     sidebar.renderTechnical({
+      models: registry.list(),
       selectedId,
       loadedId,
       backend: runtime.backend,
@@ -141,7 +162,9 @@ export async function createApp(options: AppOptions): Promise<App> {
     });
     chatView.render({
       conversation,
-      model: getModel(loadedId ?? selectedId),
+      models: registry.list(),
+      add: addState,
+      model: registry.get(loadedId ?? selectedId),
       selectedId,
       loadedId,
       locked: store.isGenerating(),
@@ -160,7 +183,9 @@ export async function createApp(options: AppOptions): Promise<App> {
     });
     status.render({
       ...runtime,
-      model: getModel(loadedId ?? selectedId),
+      models: registry.list(),
+      add: addState,
+      model: registry.get(loadedId ?? selectedId),
       selectedId,
       loadedId,
       locked: store.isGenerating(),
@@ -193,6 +218,14 @@ export async function createApp(options: AppOptions): Promise<App> {
       );
     } finally {
       generation.finish(globalThis.performance.now());
+      const stats = generation.snapshot(globalThis.performance.now());
+      if (stats.tokenCount > 0) {
+        store.recordStats(chatId, assistantId, {
+          tokenCount: stats.tokenCount,
+          elapsedMs: stats.elapsedMs,
+          tokensPerSecond: stats.tokensPerSecond,
+        });
+      }
       if (activeRequestId === requestId) activeRequestId = undefined;
       void store.flush();
       render();
@@ -220,12 +253,66 @@ export async function createApp(options: AppOptions): Promise<App> {
     render();
   }
 
+  /**
+   * Checks a pasted repository against Hugging Face before anything is downloaded.
+   * The result is held as a candidate until the user confirms it.
+   */
+  async function checkModel(input: string): Promise<void> {
+    const repoId = parseRepoId(input);
+    if (!repoId) {
+      addState = {
+        status: 'error',
+        error: 'That is not a Hugging Face repository. Use `owner/name` or a huggingface.co link.',
+        locked: store.isGenerating(),
+      };
+      render();
+      return;
+    }
+    if (registry.has(`custom:${repoId}`)) {
+      addState = { status: 'error', error: `${repoId} is already in your list.`, locked: store.isGenerating() };
+      render();
+      return;
+    }
+
+    addState = { status: 'checking', locked: store.isGenerating() };
+    render();
+
+    const result = await probeRepo(repoId, options.hfFetch ?? ((url, init) => fetch(url, init)));
+    addState = result.ok
+      ? { status: 'found', candidate: result.model, locked: store.isGenerating() }
+      : { status: 'error', error: result.reason, locked: store.isGenerating() };
+    render();
+  }
+
+  /** Adds the checked repository and selects it, without starting a download. */
+  function confirmModel(): void {
+    const candidate = addState.candidate;
+    if (!candidate) return;
+    registry.add(candidate);
+    addState = { status: 'idle', locked: store.isGenerating() };
+    selectModel(candidate.id);
+    render();
+  }
+
+  function dismissModel(): void {
+    addState = { status: 'idle', locked: store.isGenerating() };
+    render();
+  }
+
+  /** Removing the running model leaves it loaded; only the choice goes away. */
+  function removeModel(id: ModelId): void {
+    if (store.isGenerating()) return;
+    registry.remove(id);
+    if (selectedId === id) selectModel(registry.list()[0]!.id);
+    render();
+  }
+
   /** Loading is always explicit, including after a model switch. */
   function loadSelectedModel(): void {
     if (store.isGenerating() || runtime.status === 'loading') return;
     progress.reset();
     runtimeWarning = undefined;
-    client.initialize(selectedId);
+    client.initialize(registry.get(selectedId));
   }
 
   const unsubscribeStore = store.subscribe(render);

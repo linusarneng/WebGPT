@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { MODEL_CATALOG } from '../src/config/model';
 import { createTechnicalPanel, type TechnicalPanelView, type TechnicalState } from '../src/ui/technical-panel';
 
 let panel: TechnicalPanelView;
@@ -8,6 +9,7 @@ const text = (): string => panel.element.textContent ?? '';
 const idleGeneration = { tokenCount: 0, elapsedMs: 0, tokensPerSecond: undefined, generating: false };
 const render = (state: Partial<TechnicalState> = {}): void =>
   panel.render({
+    models: MODEL_CATALOG,
     selectedId: 'qwen2.5-0.5b-instruct',
     status: 'idle',
     generation: idleGeneration,
@@ -88,5 +90,25 @@ describe('permanent technical panel', () => {
       (node.getAttribute('style') ?? '').includes('overflow'),
     );
     expect(scrollers).toEqual([]);
+  });
+});
+
+describe('technical panel with a custom model', () => {
+  const CUSTOM = {
+    id: 'custom:owner/name',
+    modelId: 'owner/name',
+    name: 'name',
+    tradeoff: 'Added by you',
+    summary: 'Added by you.',
+    webgpuDtype: 'q4f16',
+    wasmDtype: 'q4',
+    approximateDownloadMb: 260,
+    custom: true,
+  } as const;
+
+  it('names the user’s own model rather than falling back to the default', () => {
+    render({ models: [...MODEL_CATALOG, CUSTOM], selectedId: CUSTOM.id, status: 'idle' });
+    expect(panel.element.textContent).toContain('name');
+    expect(panel.element.textContent).not.toContain(MODEL_CATALOG[0]!.name);
   });
 });

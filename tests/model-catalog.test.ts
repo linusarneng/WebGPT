@@ -14,10 +14,10 @@ describe('model catalog', () => {
     expect(MODEL_CATALOG).toHaveLength(3);
   });
 
-  it('keeps Qwen2.5-0.5B-Instruct as the recommended default', () => {
+  it('keeps Qwen3-0.6B as the recommended default', () => {
     const fallback = getDefaultModel();
     expect(fallback.id).toBe(DEFAULT_MODEL_ID);
-    expect(fallback.modelId).toBe('onnx-community/Qwen2.5-0.5B-Instruct');
+    expect(fallback.modelId).toBe('onnx-community/Qwen3-0.6B-ONNX');
     expect(fallback.tradeoff).toMatch(/recommended/i);
   });
 

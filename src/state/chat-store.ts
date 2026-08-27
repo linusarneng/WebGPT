@@ -1,5 +1,5 @@
 import { buildPromptMessages, type ChatMessage } from '../config/model';
-import { deriveTitle, DEFAULT_TITLE, type Conversation, type Message } from '../domain/chat';
+import { deriveTitle, DEFAULT_TITLE, type Conversation, type Message, type MessageStats } from '../domain/chat';
 import type { ChatRepository } from '../storage/chat-repository';
 import { createId } from '../utils/ids';
 import { now } from '../utils/time';
@@ -201,6 +201,13 @@ export class ChatStore {
     this.clearGenerating(assistantId);
   }
 
+  /** Attaches the measured cost of a finished reply to the message itself. */
+  recordStats(chatId: string, assistantId: string, stats: MessageStats): void {
+    this.updateMessage(chatId, assistantId, (message) =>
+      message.role === 'assistant' && message.text ? { ...message, stats } : message,
+    );
+  }
+
   /** Resets a failed reply so the same user prompt can be sent again. */
   prepareRetry(chatId: string, assistantId: string): { chatId: string; assistantId: string; prompt: string } | null {
     const conversation = this.state.conversations.find((c) => c.id === chatId);
@@ -216,6 +223,7 @@ export class ChatStore {
       text: '',
       status: 'pending',
       error: undefined,
+      stats: undefined,
     }));
     return { chatId, assistantId, prompt: prompt.text };
   }

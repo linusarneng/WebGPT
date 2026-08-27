@@ -1,22 +1,31 @@
 import type { ModelConfig, ModelId } from '../config/model';
-import type { Conversation, Message } from '../domain/chat';
+import type { Conversation, Message, MessageStats } from '../domain/chat';
 import { splitThinking } from '../domain/thinking';
 import type { LoadPhase, RuntimeStatus } from '../inference/protocol';
 import { clear, el } from './dom';
 import { icon } from './icons';
 import { renderRichText } from './markdown';
+import type { ModelAddState } from './model-add';
 import { createModelPicker, type ModelPickerView } from './model-picker';
 import { LOAD_PHASES } from './model-status';
 
 export interface ChatViewCallbacks {
   onLoadModel(): void;
   onSelectModel(id: ModelId): void;
+  onCheckModel(input: string): void;
+  onConfirmModel(): void;
+  onDismissModel(): void;
+  onRemoveModel(id: ModelId): void;
   onRetry(messageId: string): void;
   onCopy(text: string): void;
 }
 
 export interface ChatViewState {
   conversation: Conversation | undefined;
+  /** Every model this browser can choose from, for the first-run rack. */
+  models: readonly ModelConfig[];
+  /** State of the add-a-model form on the first-run card. */
+  add?: ModelAddState;
   /** The model the card is about: the pending choice, or the running one. */
   model: ModelConfig;
   selectedId: ModelId;
@@ -50,7 +59,13 @@ function specRow(term: string, value: string): HTMLElement {
 
 export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
   const picker: ModelPickerView = createModelPicker(
-    { onSelect: (id) => callbacks.onSelectModel(id) },
+    {
+      onSelect: (id) => callbacks.onSelectModel(id),
+      onCheckModel: (input) => callbacks.onCheckModel(input),
+      onConfirmModel: () => callbacks.onConfirmModel(),
+      onDismissModel: () => callbacks.onDismissModel(),
+      onRemoveModel: (id) => callbacks.onRemoveModel(id),
+    },
     { name: 'model-card-choice' },
   );
   const list = el('ul', { class: 'message-list' });
@@ -117,11 +132,18 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
         specRow('Repository', model.modelId),
         specRow('Runs on', 'Your device — WebGPU, or CPU if WebGPU is unavailable'),
         specRow('Needs', 'No account, no API key, no server'),
-        specRow('First load', `About ${model.approximateDownloadMb} MB, then cached in this browser`),
+        specRow(
+          'First load',
+          model.approximateDownloadMb === undefined
+            ? 'Size not reported by the repository, then cached in this browser'
+            : `About ${model.approximateDownloadMb} MB, then cached in this browser`,
+        ),
       ]),
     ]);
 
     picker.render({
+      models: state.models,
+      add: state.add,
       selectedId: state.selectedId,
       loadedId: state.loadedId,
       locked: state.locked || loading,
@@ -213,7 +235,23 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
     return details;
   }
 
-  function renderActions(answer: string): HTMLElement {
+  /** The measured cost of one reply, in the same units the runtime panel uses. */
+  function renderStats(stats: MessageStats): HTMLElement {
+    const parts = [
+      stats.tokensPerSecond === undefined ? undefined : `${stats.tokensPerSecond.toFixed(1)} tok/s`,
+      `${stats.tokenCount} ${stats.tokenCount === 1 ? 'token' : 'tokens'}`,
+      `${(stats.elapsedMs / 1_000).toFixed(1)} s`,
+    ].filter((part): part is string => part !== undefined);
+
+    const row = el('span', { class: 'message__stats' });
+    parts.forEach((part, index) => {
+      if (index > 0) row.append(el('span', { class: 'message__stats-dot', 'aria-hidden': 'true' }, ['·']));
+      row.append(el('span', { class: 'message__stat' }, [part]));
+    });
+    return row;
+  }
+
+  function renderActions(answer: string, stats: MessageStats | undefined): HTMLElement {
     const copy = el(
       'button',
       { class: 'msg-action', type: 'button', 'aria-label': 'Copy this response' },
@@ -229,7 +267,9 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
         delete copy.dataset.done;
       }, 1400);
     });
-    return el('div', { class: 'message__actions' }, [copy]);
+    const actions = el('div', { class: 'message__actions' }, [copy]);
+    if (stats) actions.append(renderStats(stats));
+    return actions;
   }
 
   function renderMessage(message: Message): HTMLElement {
@@ -292,7 +332,7 @@ export function createChatView(callbacks: ChatViewCallbacks): ChatViewView {
     }
 
     if (message.role === 'assistant' && (message.status === 'done' || message.status === 'stopped') && split.answer) {
-      item.append(renderActions(split.answer));
+      item.append(renderActions(split.answer, message.stats));
     }
 
     return item;

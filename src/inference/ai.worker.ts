@@ -7,7 +7,7 @@ import {
   type Chat,
   type TextGenerationPipeline,
 } from '@huggingface/transformers';
-import { GENERATION, getModel, type ModelConfig, type ModelId } from '../config/model';
+import { GENERATION, type ModelConfig } from '../config/model';
 import type { Backend, WorkerCommand, WorkerEvent } from './protocol';
 
 // Model weights come from the Hugging Face CDN; nothing is served by an app backend.
@@ -66,8 +66,7 @@ async function release(): Promise<void> {
   }
 }
 
-async function initialize(id: ModelId): Promise<void> {
-  const model = getModel(id);
+async function initialize(model: ModelConfig): Promise<void> {
   if (generator && active?.id === model.id) {
     emit({
       type: 'ready',

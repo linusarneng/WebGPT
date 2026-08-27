@@ -1,4 +1,4 @@
-import type { ModelId } from '../config/model';
+import type { ModelConfig, ModelId } from '../config/model';
 import type {
   Backend,
   GenerateRequest,
@@ -64,7 +64,7 @@ export class InferenceClient {
   }
 
   /** Spawns the worker on first call and asks it to load `model`. Safe to retry. */
-  initialize(model: ModelId): void {
+  initialize(model: ModelConfig): void {
     this.error = undefined;
     this.status = 'loading';
     if (!this.worker) {

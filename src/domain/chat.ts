@@ -3,6 +3,13 @@ export type Role = 'user' | 'assistant';
 /** Lifecycle of a single assistant reply. User messages are always `done`. */
 export type MessageStatus = 'pending' | 'streaming' | 'done' | 'stopped' | 'failed';
 
+/** What one assistant reply cost, measured by the tokenizer, not by word count. */
+export interface MessageStats {
+  tokenCount: number;
+  elapsedMs: number;
+  tokensPerSecond: number | undefined;
+}
+
 export interface Message {
   id: string;
   role: Role;
@@ -11,6 +18,8 @@ export interface Message {
   /** Populated when `status === 'failed'` so the UI can explain what went wrong. */
   error?: string;
   createdAt: number;
+  /** Set once an assistant reply finishes, so the footer can show its cost. */
+  stats?: MessageStats;
 }
 
 export interface Conversation {

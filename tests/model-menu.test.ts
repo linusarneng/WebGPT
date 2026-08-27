@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getModel } from '../src/config/model';
+import { MODEL_CATALOG, getModel } from '../src/config/model';
 import { createModelMenu, type ModelMenuView } from '../src/ui/model-menu';
 
 const onSelect = vi.fn();
@@ -14,6 +14,7 @@ const action = (): HTMLButtonElement | null =>
 
 function render(overrides: Partial<Parameters<ModelMenuView['render']>[0]> = {}): void {
   menu.render({
+    models: MODEL_CATALOG,
     model: getModel('qwen2.5-0.5b-instruct'),
     status: 'ready',
     backend: 'webgpu',

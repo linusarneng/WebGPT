@@ -1,9 +1,11 @@
-import { getModel, type ModelId } from '../config/model';
+import { getDefaultModel, type ModelConfig, type ModelId } from '../config/model';
 import type { Backend, LoadPhase, RuntimeStatus } from '../inference/protocol';
 import { formatDuration, type GenerationStats } from '../telemetry/runtime-telemetry';
 import { el } from './dom';
 
 export interface TechnicalState {
+  /** Every choosable model, so custom ones resolve to their own names. */
+  models: readonly ModelConfig[];
   selectedId: ModelId;
   loadedId?: ModelId;
   backend?: Backend;
@@ -94,8 +96,10 @@ export function createTechnicalPanel(): TechnicalPanelView {
   function render(state: TechnicalState): void {
     lastState = state;
     const runtimeStatus = visualStatus(state);
-    const selected = getModel(state.selectedId);
-    const loaded = state.loadedId ? getModel(state.loadedId) : undefined;
+    const resolve = (id: ModelId): ModelConfig =>
+      state.models.find((model) => model.id === id) ?? getDefaultModel();
+    const selected = resolve(state.selectedId);
+    const loaded = state.loadedId ? resolve(state.loadedId) : undefined;
 
     status.replaceChildren(
       el('span', { class: 'technical-panel__status-dot', 'aria-hidden': 'true' }),

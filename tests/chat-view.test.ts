@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getModel } from '../src/config/model';
+import { MODEL_CATALOG, getModel } from '../src/config/model';
 import { createChatView, type ChatViewState, type ChatViewView } from '../src/ui/chat-view';
 
 const callbacks = {
   onLoadModel: vi.fn(),
   onSelectModel: vi.fn(),
+  onCheckModel: vi.fn(),
+  onConfirmModel: vi.fn(),
+  onDismissModel: vi.fn(),
+  onRemoveModel: vi.fn(),
   onRetry: vi.fn(),
   onCopy: vi.fn(),
 };
@@ -17,6 +21,7 @@ const render = (state: Partial<ChatViewState> = {}): void =>
   view.render({
     conversation: undefined,
     runtimeStatus: 'idle',
+    models: MODEL_CATALOG,
     model: getModel('qwen2.5-0.5b-instruct'),
     selectedId: 'qwen2.5-0.5b-instruct',
     locked: false,

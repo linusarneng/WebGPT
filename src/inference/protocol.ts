@@ -1,4 +1,4 @@
-import type { ChatMessage, ModelId } from '../config/model';
+import type { ChatMessage, ModelConfig, ModelId } from '../config/model';
 
 export type Backend = 'webgpu' | 'wasm';
 
@@ -11,7 +11,8 @@ export type ErrorCode = 'load-failed' | 'generation-failed' | 'unsupported' | 'w
 
 /** Main thread → worker. */
 export type WorkerCommand =
-  | { type: 'initialize'; model: ModelId }
+  /** The whole config travels, so the worker never has to resolve an id itself. */
+  | { type: 'initialize'; model: ModelConfig }
   | { type: 'generate'; requestId: string; messages: ChatMessage[] }
   | { type: 'abort'; requestId: string }
   | { type: 'dispose' };

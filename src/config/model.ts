@@ -13,7 +13,17 @@ export interface ChatMessage {
   content: string;
 }
 
-export type ModelId = 'qwen2.5-0.5b-instruct' | 'granite-4.0-350m' | 'qwen3-0.6b';
+/** The three models WebGPT ships with. Custom entries are ids too, hence `string`. */
+export type BuiltinModelId = 'qwen2.5-0.5b-instruct' | 'granite-4.0-350m' | 'qwen3-0.6b';
+
+/**
+ * A model key. Built-ins use the ids above; a model the user added uses
+ * `custom:<owner>/<name>`. It is a plain string because the set is open.
+ */
+export type ModelId = string;
+
+/** Quantisations Transformers.js can be asked for. */
+export type Dtype = 'q4f16' | 'fp16' | 'q4' | 'q8' | 'int8' | 'fp32';
 
 export interface ModelConfig {
   /** Stable key used in the UI and in the stored preference. */
@@ -27,11 +37,16 @@ export interface ModelConfig {
   /** One sentence on when to pick it. No benchmarks, no timings. */
   readonly summary: string;
   /** Quantisation used when WebGPU is available. */
-  readonly webgpuDtype: 'q4f16' | 'fp16' | 'q4';
+  readonly webgpuDtype: Dtype;
   /** Quantisation used on the slower WASM fallback path. */
-  readonly wasmDtype: 'q4' | 'q8' | 'int8';
-  /** Approximate first download, shown before the user opts into it. */
-  readonly approximateDownloadMb: number;
+  readonly wasmDtype: Dtype;
+  /**
+   * Approximate first download, shown before the user opts into it. Undefined
+   * when a custom repo would not report its weight size.
+   */
+  readonly approximateDownloadMb: number | undefined;
+  /** True for a model the user added by repo id, rather than a shipped one. */
+  readonly custom?: boolean;
 }
 
 /** Generation behaviour is a property of WebGPT, not of any one model. */
@@ -49,18 +64,18 @@ export const GENERATION = {
   maxHistoryMessages: 12,
 } as const;
 
-export const DEFAULT_MODEL_ID: ModelId = 'qwen2.5-0.5b-instruct';
+export const DEFAULT_MODEL_ID: BuiltinModelId = 'qwen3-0.6b';
 
 export const MODEL_CATALOG: readonly ModelConfig[] = [
   {
-    id: 'qwen2.5-0.5b-instruct',
-    modelId: 'onnx-community/Qwen2.5-0.5B-Instruct',
-    name: 'Qwen2.5 0.5B Instruct',
-    tradeoff: 'Recommended balance',
-    summary: 'The steady choice: answers general questions and short writing tasks.',
+    id: 'qwen3-0.6b',
+    modelId: 'onnx-community/Qwen3-0.6B-ONNX',
+    name: 'Qwen3 0.6B',
+    tradeoff: 'Recommended',
+    summary: 'The newest of the three, and the one with the most headroom on longer, harder prompts.',
     webgpuDtype: 'q4f16',
     wasmDtype: 'q4',
-    approximateDownloadMb: 500,
+    approximateDownloadMb: 590,
   },
   {
     id: 'granite-4.0-350m',
@@ -73,19 +88,27 @@ export const MODEL_CATALOG: readonly ModelConfig[] = [
     approximateDownloadMb: 360,
   },
   {
-    id: 'qwen3-0.6b',
-    modelId: 'onnx-community/Qwen3-0.6B-ONNX',
-    name: 'Qwen3 0.6B',
-    tradeoff: 'Most capable',
-    summary: 'The newest and largest of the three: more headroom on longer, harder prompts.',
+    id: 'qwen2.5-0.5b-instruct',
+    modelId: 'onnx-community/Qwen2.5-0.5B-Instruct',
+    name: 'Qwen2.5 0.5B Instruct',
+    tradeoff: 'Lighter alternative',
+    summary: 'A smaller download that still handles general questions and short writing tasks.',
     webgpuDtype: 'q4f16',
     wasmDtype: 'q4',
-    approximateDownloadMb: 590,
+    approximateDownloadMb: 500,
   },
 ];
 
+/** True for a built-in id. Custom ids are validated by the registry instead. */
 export function isModelId(value: unknown): value is ModelId {
   return MODEL_CATALOG.some((model) => model.id === value);
+}
+
+/** One phrase for a first download, whether or not the size is known. */
+export function formatDownloadSize(model: ModelConfig): string {
+  return model.approximateDownloadMb === undefined
+    ? 'Download size not reported by the repository'
+    : `~${model.approximateDownloadMb} MB first download`;
 }
 
 export function getDefaultModel(): ModelConfig {

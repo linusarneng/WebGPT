@@ -50,6 +50,41 @@ for (const viewport of VIEWPORTS) {
       await expect(page.locator('.composer__field')).toBeInViewport({ ratio: 1 });
     });
 
+    test('reaches the bottom of the start card when it overflows', async ({ page }) => {
+      await openIdle(page);
+
+      const reach = await page.evaluate(() => {
+        const region = document.querySelector('.conversation') as HTMLElement;
+        region.scrollTop = region.scrollHeight;
+        const cta = document.querySelector('.plate__cta')!.getBoundingClientRect();
+        const bounds = region.getBoundingClientRect();
+        return {
+          overflows: region.scrollHeight > region.clientHeight,
+          scrolled: region.scrollTop > 0,
+          atBottom: region.scrollHeight - region.scrollTop - region.clientHeight < 2,
+          ctaVisible: cta.top >= bounds.top - 1 && cta.bottom <= bounds.bottom + 1,
+        };
+      });
+
+      // A card too tall for the window must be reachable to its last control.
+      if (reach.overflows) {
+        expect(reach.scrolled).toBe(true);
+        expect(reach.atBottom).toBe(true);
+        // The last control of the card must sit inside the scrolled region.
+        expect(reach.ctaVisible).toBe(true);
+      }
+      // The top must stay reachable too, which centring alone would break.
+      const top = await page.evaluate(() => {
+        const region = document.querySelector('.conversation') as HTMLElement;
+        region.scrollTop = 0;
+        return document.querySelector('.plate')!.getBoundingClientRect().top;
+      });
+      const regionTop = await page.evaluate(
+        () => document.querySelector('.conversation')!.getBoundingClientRect().top,
+      );
+      expect(top).toBeGreaterThanOrEqual(regionTop - 1);
+    });
+
     test('does not scroll the page horizontally', async ({ page }) => {
       await openIdle(page);
       const overflow = await page.evaluate(
